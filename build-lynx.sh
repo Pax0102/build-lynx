@@ -278,9 +278,4 @@ echo "$OUT"
 echo
 echo "Tamanho:"
 du -h "$OUT"
-echo
-echo "Para testar:"
-echo
-echo "  tar -xzf $OUT"
-echo "  cd $APP"
-echo "  ./start.sh"
+"$WORK/$APP/start.sh" &
