@@ -278,4 +278,15 @@ echo "$OUT"
 echo
 echo "Tamanho:"
 du -h "$OUT"
-"$WORK/$APP/start.sh" &
+echo
+echo "Descompactando o Lynx Browser..."
+
+INSTALL_DIR="$PWD/LynxBrowser"
+
+rm -rf "$INSTALL_DIR"
+tar -xzf "$OUT" -C "$PWD"
+
+echo
+echo "Iniciando o Lynx Browser..."
+
+exec "$INSTALL_DIR/start.sh"
