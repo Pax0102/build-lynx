@@ -263,6 +263,7 @@ document
 </html>
 HOME_EOF
 
+# Copia a logo para a config e substitui o ícone do Firefox
 cp "$PWD/lynx-logo.png" "$WORK/$APP/config/lynx-logo.png"
 
 cd "$WORK"
@@ -280,6 +281,9 @@ tar -xJf firefox.tar.xz
 mv firefox "$APP/browser/firefox"
 
 rm firefox.tar.xz
+
+# Substitui o ícone do Firefox pela logo do Lynx
+cp "$APP/config/lynx-logo.png" "$APP/browser/firefox/browser/icons/mozicon128.png"
 
 echo "[3/6] Criando configuração..."
 
@@ -327,7 +331,6 @@ cat > "$APP/profile/user.js" <<'EOF'
 
 user_pref("browser.startup.homepage", "https://duckduckgo.com/");
 user_pref("browser.newtabpage.enabled", false);
-user_pref("extensions.activeThemeID", "firefox-compact-dark@mozilla.org");
 
 user_pref("privacy.trackingprotection.enabled", true);
 user_pref("privacy.trackingprotection.pbmode.enabled", true);
@@ -351,6 +354,9 @@ user_pref("browser.shell.checkDefaultBrowser", false);
 user_pref("browser.warnOnQuit", false);
 
 user_pref("browser.cache.disk.enable", true);
+
+// Habilitar userChrome.css
+user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);
 EOF
 
 echo "[5/6] Criando controle de VPN..."
@@ -437,9 +443,10 @@ if [ ! -x "$FIREFOX" ]; then
 fi
 
 mkdir -p "$PROFILE"
+mkdir -p "$PROFILE/chrome"
 
 cat > "$PROFILE/user.js" <<'USERJS_EOF'
-/* Lynx Browser - DNS seguro */
+/* Lynx Browser - Configurações */
 
 user_pref("browser.startup.homepage", "https://duckduckgo.com/");
 
@@ -458,14 +465,47 @@ user_pref("media.peerconnection.enabled", false);
 user_pref("dom.battery.enabled", false);
 user_pref("browser.send_pings", false);
 
-/* Sem proxy/VPN */
+/* Sem proxy */
 user_pref("network.proxy.type", 0);
+
+/* Modo escuro */
+user_pref("extensions.activeThemeID", "firefox-compact-dark@mozilla.org");
+
+/* Habilitar userChrome.css */
+user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);
 USERJS_EOF
+
+# Esconde "Firefox" na barra de título e menus
+cat > "$PROFILE/chrome/userChrome.css" <<'CSS_EOF'
+/* Lynx Browser - Remove referências ao Firefox */
+
+/* Esconde o nome Firefox no menu principal */
+#appMenu-protonMainView .panel-header h1,
+#appMenu-protonMainView .panel-header description {
+    visibility: collapse !important;
+}
+
+/* Remove "Firefox" da barra de título */
+#titlebar {
+    -moz-appearance: none !important;
+}
+
+/* Esconde o logo do Firefox no menu */
+#PanelUI-menu-button .toolbarbutton-icon {
+    list-style-image: none !important;
+}
+
+/* Esconde "Mozilla Firefox" na tela About */
+#aboutHeaderLearnMore {
+    display: none !important;
+}
+CSS_EOF
 
 echo "========================================="
 echo " LYNX BROWSER"
 echo " DNS: CLOUDFLARE 1.1.1.1"
 echo " DNS-over-HTTPS: ATIVADO"
+echo " TEMA: ESCURO"
 echo " VPN/PROXY: DESATIVADO"
 echo "========================================="
 
