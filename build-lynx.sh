@@ -428,6 +428,7 @@ set -euo pipefail
 BASE="$(cd "$(dirname "$0")" && pwd)"
 FIREFOX="$BASE/browser/firefox/firefox"
 PROFILE="$BASE/profile"
+HOME_PAGE="$BASE/config/home.html"
 
 if [ ! -x "$FIREFOX" ]; then
     echo "Erro: Firefox não encontrado."
@@ -470,6 +471,7 @@ echo "========================================="
 exec "$FIREFOX" \
     --no-remote \
     --profile "$PROFILE" \
+    "$HOME_PAGE" \
     "$@"
 LYNX_EOF
 
