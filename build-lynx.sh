@@ -15,6 +15,256 @@ mkdir -p "$WORK/$APP/browser"
 mkdir -p "$WORK/$APP/profile"
 mkdir -p "$WORK/$APP/config"
 
+cat > "$WORK/$APP/config/home.html" <<'HOME_EOF'
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lynx Browser</title>
+
+<style>
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+}
+
+body{
+    width:100%;
+    height:100vh;
+    overflow:hidden;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:
+        radial-gradient(circle at 50% 40%,#06295c 0%,#02050a 38%,#000 100%);
+    color:white;
+    font-family:Arial,sans-serif;
+}
+
+.container{
+    width:90%;
+    max-width:700px;
+    text-align:center;
+}
+
+.logo{
+    width:150px;
+    height:150px;
+    object-fit:cover;
+    border-radius:28px;
+    margin-bottom:28px;
+    box-shadow:
+        0 0 35px rgba(0,110,255,.45),
+        0 20px 50px rgba(0,0,0,.7);
+    animation:float 4s ease-in-out infinite;
+}
+
+@keyframes float{
+    0%,100%{
+        transform:translateY(0);
+    }
+    50%{
+        transform:translateY(-8px);
+    }
+}
+
+h1{
+    font-size:52px;
+    font-weight:800;
+    letter-spacing:-3px;
+}
+
+h1 span{
+    color:#1683ff;
+}
+
+.subtitle{
+    margin-top:10px;
+    color:#718096;
+    font-size:15px;
+}
+
+.search-box{
+    position:relative;
+    margin-top:35px;
+}
+
+.search{
+    width:100%;
+    height:62px;
+    padding:0 25px;
+    border-radius:18px;
+    border:1px solid rgba(22,131,255,.25);
+    background:rgba(5,10,18,.85);
+    color:white;
+    outline:none;
+    font-size:16px;
+    box-shadow:0 20px 50px rgba(0,0,0,.4);
+    transition:.25s;
+}
+
+.search:focus{
+    border-color:#1683ff;
+    box-shadow:
+        0 0 0 4px rgba(22,131,255,.1),
+        0 20px 60px rgba(0,0,0,.5);
+}
+
+.search::placeholder{
+    color:#59677a;
+}
+
+.shortcuts{
+    margin-top:25px;
+    display:flex;
+    justify-content:center;
+    gap:12px;
+    flex-wrap:wrap;
+}
+
+.shortcut{
+    padding:11px 18px;
+    border-radius:12px;
+    border:1px solid rgba(255,255,255,.07);
+    background:rgba(255,255,255,.035);
+    color:#8290a3;
+    cursor:pointer;
+    transition:.2s;
+}
+
+.shortcut:hover{
+    color:white;
+    border-color:#1683ff;
+    background:rgba(22,131,255,.08);
+    transform:translateY(-3px);
+}
+
+.footer{
+    position:fixed;
+    bottom:20px;
+    color:#394454;
+    font-size:11px;
+}
+
+.footer span{
+    color:#1683ff;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <img
+        class="logo"
+        src="lynx-logo.png"
+        alt="Lynx"
+    >
+
+    <h1>Bem-vindo ao <span>Lynx</span></h1>
+
+    <p class="subtitle">
+        Navegue rápido. Navegue do seu jeito.
+    </p>
+
+    <div class="search-box">
+
+        <input
+            id="search"
+            class="search"
+            type="text"
+            placeholder="Pesquisar na web ou digitar um endereço..."
+            autofocus
+        >
+
+    </div>
+
+    <div class="shortcuts">
+
+        <div class="shortcut"
+             onclick="abrir('https://duckduckgo.com')">
+            🔎 DuckDuckGo
+        </div>
+
+        <div class="shortcut"
+             onclick="abrir('https://www.youtube.com')">
+            ▶ YouTube
+        </div>
+
+        <div class="shortcut"
+             onclick="abrir('https://github.com')">
+            GitHub
+        </div>
+
+        <div class="shortcut"
+             onclick="abrir('https://www.google.com')">
+            Google
+        </div>
+
+    </div>
+
+</div>
+
+<div class="footer">
+    Lynx Browser <span>•</span> Fast • Private • Simple
+</div>
+
+<script>
+function pesquisar(){
+
+    const texto =
+        document.getElementById("search").value.trim();
+
+    if(!texto)
+        return;
+
+    if(
+        texto.startsWith("http://") ||
+        texto.startsWith("https://")
+    ){
+
+        window.location.href = texto;
+
+    }else if(
+        texto.includes(".") &&
+        !texto.includes(" ")
+    ){
+
+        window.location.href = "https://" + texto;
+
+    }else{
+
+        window.location.href =
+            "https://duckduckgo.com/?q=" +
+            encodeURIComponent(texto);
+
+    }
+}
+
+function abrir(url){
+    window.location.href = url;
+}
+
+document
+    .getElementById("search")
+    .addEventListener("keydown",function(e){
+
+        if(e.key === "Enter"){
+            pesquisar();
+        }
+
+    });
+</script>
+
+</body>
+</html>
+HOME_EOF
+
+cp "$PWD/lynx-logo.png" "$WORK/$APP/config/lynx-logo.png"
+
 cd "$WORK"
 
 echo "[1/6] Baixando Firefox oficial..."
