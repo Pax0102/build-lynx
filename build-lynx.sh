@@ -327,6 +327,7 @@ cat > "$APP/profile/user.js" <<'EOF'
 
 user_pref("browser.startup.homepage", "https://duckduckgo.com/");
 user_pref("browser.newtabpage.enabled", false);
+user_pref("extensions.activeThemeID", "firefox-compact-dark@mozilla.org");
 
 user_pref("privacy.trackingprotection.enabled", true);
 user_pref("privacy.trackingprotection.pbmode.enabled", true);
