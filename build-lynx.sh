@@ -288,8 +288,12 @@ mv firefox "$APP/browser/firefox"
 
 rm firefox.tar.xz
 
-# Substitui o ícone do Firefox pela logo do Lynx
-cp "$APP/config/lynx-logo.png" "$APP/browser/firefox/browser/icons/mozicon128.png"
+ICON_PATH=$(find "$APP/browser/firefox" -name "mozicon128.png" 2>/dev/null | head -1)
+if [ -n "$ICON_PATH" ]; then
+    cp "$APP/config/lynx-logo.png" "$ICON_PATH"
+else
+    echo "Aviso: ícone do Firefox não encontrado, pulando substituição."
+fi
 
 echo "[3/6] Criando configuração..."
 
