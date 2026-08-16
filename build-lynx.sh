@@ -720,23 +720,27 @@ cat > "$PROFILE/chrome/userChrome.css" <<'CSS_EOF'
 }
 CSS_EOF
 
-# Configura nova aba via autoconfig (método correto sem extensão assinada)
-FIREFOX_DIR="$BASE/browser/firefox"
-
-# Habilita o autoconfig no Firefox
-mkdir -p "$FIREFOX_DIR/defaults/pref"
-cat > "$FIREFOX_DIR/defaults/pref/autoconfig.js" <<'AUTOCONFIG_EOF'
-pref("general.config.filename", "lynx.cfg");
-pref("general.config.obscure_value", 0);
-AUTOCONFIG_EOF
-
-# Gera o lynx.cfg com o caminho absoluto correto para esta instalação
+# Usa policies.json para forçar nova aba — funciona em Firefox moderno sem extensão assinada
 HOME_URL="file://${BASE}/config/home.html"
-cat > "$FIREFOX_DIR/lynx.cfg" <<LYNXCFG_EOF
-// Lynx Browser - AutoConfig
-lockPref("browser.newtab.url", "${HOME_URL}");
-lockPref("browser.newtabpage.url", "${HOME_URL}");
-LYNXCFG_EOF
+DIST_DIR="$BASE/browser/firefox/distribution"
+mkdir -p "$DIST_DIR"
+cat > "$DIST_DIR/policies.json" <<POLICIES_EOF
+{
+  "policies": {
+    "NewTabPage": "${HOME_URL}",
+    "Homepage": {
+      "URL": "${HOME_URL}",
+      "Locked": true,
+      "StartPage": "homepage"
+    },
+    "DisplayBookmarksToolbar": "never",
+    "OverrideFirstRunPage": "",
+    "OverridePostUpdatePage": "",
+    "DisableFirefoxStudies": true,
+    "DisableTelemetry": true
+  }
+}
+POLICIES_EOF
 
 echo "========================================="
 echo " LYNX BROWSER"
