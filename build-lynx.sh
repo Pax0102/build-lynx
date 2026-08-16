@@ -21,6 +21,8 @@ if [ ! -f "$PWD/lynx-logo.png" ]; then
     curl -L "https://raw.githubusercontent.com/Pax0102/img/main/1.png" -o "$PWD/lynx-logo.png"
 fi
 
+
+
 # Converte a logo para base64 para embutir no HTML
 LOGO_B64=$(base64 -w 0 "$PWD/lynx-logo.png")
 
@@ -731,6 +733,7 @@ echo "========================================="
 exec "$FIREFOX" \
     --no-remote \
     --profile "$PROFILE" \
+    --name "LynxBrowser" \
     "$HOME_PAGE" \
     "$@"
 LYNX_EOF
@@ -744,6 +747,20 @@ exec "$BASE/lynx" "$@"
 START_EOF
 
 chmod +x "$APP/start.sh"
+
+cat > "$APP/Lynx Browser.desktop" <<'DESKTOP_EOF'
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Lynx Browser
+GenericName=Web Browser
+Comment=Lynx Browser
+Exec=./start.sh
+Terminal=false
+StartupNotify=true
+StartupWMClass=LynxBrowser
+Categories=Network;WebBrowser;
+DESKTOP_EOF
 
 cat > "$APP/README.txt" <<'README_EOF'
 ====================================================
