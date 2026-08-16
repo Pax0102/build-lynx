@@ -588,15 +588,14 @@ cat > "$NEW_TAB/manifest.json" <<'EOF'
 }
 EOF
 
-cp "$APP/config/home.html" "$NEW_TAB/home.html"
+cp "$WORK/$APP/config/home.html" "$NEW_TAB/home.html"
 
+XPI="$WORK/$APP/config/lynx-newtab.xpi"
 cd "$NEW_TAB"
-zip -qr "$APP/config/lynx-newtab.xpi" .
+zip -qr "$XPI" .
 cd "$WORK"
 
 rm -rf "$NEW_TAB"
-
-cd "$WORK"
 
 echo "[1/6] Baixando Firefox oficial..."
 
