@@ -790,6 +790,8 @@ exec "$FIREFOX" \
     --profile "$PROFILE" \
     "$HOME_PAGE" \
     "$@"
+    
+LYNX_EOF
 
 chmod +x "$APP/lynx"
 
