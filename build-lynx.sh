@@ -520,10 +520,9 @@ h1 b{ color:var(--blue-bright); font-weight:800; }
 <script>
 function atualizarRelogio(){
     const agora=new Date();
-    const h=String(agora.getHours()).padStart(2,"0");
-    const m=String(agora.getMinutes()).padStart(2,"0");
-    const s=String(agora.getSeconds()).padStart(2,"0");
-    document.getElementById("clock").textContent=h+":"+m+":"+s;
+    const opcoes={timeZone:"America/Sao_Paulo",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false};
+    const hora=agora.toLocaleTimeString("pt-BR",opcoes);
+    document.getElementById("clock").textContent=hora;
 }
 atualizarRelogio();
 setInterval(atualizarRelogio,1000);
@@ -721,24 +720,23 @@ cat > "$PROFILE/chrome/userChrome.css" <<'CSS_EOF'
 }
 CSS_EOF
 
-# Cria extensão para nova aba abrir o home.html do Lynx
-NEWTAB_DIR="$PROFILE/extensions/lynx-newtab@lynx"
-mkdir -p "$NEWTAB_DIR"
+# Configura nova aba via autoconfig (método correto sem extensão assinada)
+FIREFOX_DIR="$BASE/browser/firefox"
 
-cat > "$NEWTAB_DIR/manifest.json" <<MANIFEST_EOF
-{
-  "manifest_version": 2,
-  "name": "Lynx New Tab",
-  "version": "1.0",
-  "description": "Lynx Browser custom new tab",
-  "chrome_url_overrides": {
-    "newtab": "newtab.html"
-  },
-  "permissions": []
-}
-MANIFEST_EOF
+# Habilita o autoconfig no Firefox
+mkdir -p "$FIREFOX_DIR/defaults/pref"
+cat > "$FIREFOX_DIR/defaults/pref/autoconfig.js" <<'AUTOCONFIG_EOF'
+pref("general.config.filename", "lynx.cfg");
+pref("general.config.obscure_value", 0);
+AUTOCONFIG_EOF
 
-cp "$BASE/config/home.html" "$NEWTAB_DIR/newtab.html"
+# Gera o lynx.cfg com o caminho absoluto correto para esta instalação
+HOME_URL="file://${BASE}/config/home.html"
+cat > "$FIREFOX_DIR/lynx.cfg" <<LYNXCFG_EOF
+// Lynx Browser - AutoConfig
+lockPref("browser.newtab.url", "${HOME_URL}");
+lockPref("browser.newtabpage.url", "${HOME_URL}");
+LYNXCFG_EOF
 
 echo "========================================="
 echo " LYNX BROWSER"
