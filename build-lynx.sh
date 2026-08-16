@@ -657,6 +657,11 @@ fi
 mkdir -p "$PROFILE"
 mkdir -p "$PROFILE/chrome"
 
+# Gera policies.json com caminho absoluto desta instalação
+DIST_DIR="$BASE/browser/firefox/distribution"
+mkdir -p "$DIST_DIR"
+printf '{\n  "policies": {\n    "NewTabPage": "file://%s/config/home.html",\n    "Homepage": {\n      "URL": "file://%s/config/home.html",\n      "Locked": true,\n      "StartPage": "homepage"\n    },\n    "OverrideFirstRunPage": "",\n    "OverridePostUpdatePage": "",\n    "DisableFirefoxStudies": true,\n    "DisableTelemetry": true\n  }\n}\n' "$BASE" "$BASE" > "$DIST_DIR/policies.json"
+
 # Gera user.js com caminho absoluto correto para esta instalação
 cat > "$PROFILE/user.js" <<USERJS_EOF
 /* Lynx Browser - Configurações */
@@ -696,27 +701,6 @@ user_pref("startup.homepage_welcome_url.additional", "");
 user_pref("startup.homepage_override_url", "");
 user_pref("browser.startup.upgradeDialog.enabled", false);
 USERJS_EOF
-
-# Gera policies.json com caminho absoluto correto para esta instalação
-DIST_DIR="$BASE/browser/firefox/distribution"
-mkdir -p "$DIST_DIR"
-cat > "$DIST_DIR/policies.json" <<POLICIES_EOF
-{
-  "policies": {
-    "NewTabPage": "file://$BASE/config/home.html",
-    "Homepage": {
-      "URL": "file://$BASE/config/home.html",
-      "Locked": true,
-      "StartPage": "homepage"
-    },
-    "OverrideFirstRunPage": "",
-    "OverridePostUpdatePage": "",
-    "DisableFirefoxStudies": true,
-    "DisableTelemetry": true,
-    "DisplayBookmarksToolbar": "never"
-  }
-}
-POLICIES_EOF
 
 # Esconde referências ao Firefox na interface
 cat > "$PROFILE/chrome/userChrome.css" <<'CSS_EOF'
