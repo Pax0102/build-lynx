@@ -263,6 +263,12 @@ document
 </html>
 HOME_EOF
 
+# Baixa a logo automaticamente se não existir
+if [ ! -f "$PWD/lynx-logo.png" ]; then
+    echo "Baixando logo do Lynx..."
+    curl -L "https://raw.githubusercontent.com/Pax0102/img/main/1.png" -o "$PWD/lynx-logo.png"
+fi
+
 # Copia a logo para a config e substitui o ícone do Firefox
 cp "$PWD/lynx-logo.png" "$WORK/$APP/config/lynx-logo.png"
 
