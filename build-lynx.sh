@@ -632,8 +632,6 @@ echo "[4/6] Criando perfil privado do Lynx..."
 
 cat > "$APP/profile/user.js" <<'EOF'
 // LYNX BROWSER - PRIVACY SETTINGS
-user_pref("browser.startup.homepage", "https://duckduckgo.com/");
-user_pref("browser.newtabpage.enabled", false);
 user_pref("privacy.trackingprotection.enabled", true);
 user_pref("privacy.trackingprotection.pbmode.enabled", true);
 user_pref("privacy.trackingprotection.socialtracking.enabled", true);
@@ -679,8 +677,10 @@ set -euo pipefail
 BASE="$(cd "$(dirname "$0")" && pwd)"
 FIREFOX="$BASE/browser/firefox/firefox"
 PROFILE="$BASE/profile"
+
 HOME_PAGE="$BASE/config/home.html"
 NEW_TAB_XPI="$BASE/config/lynx-newtab.xpi"
+
 POLICY_DIR="$BASE/browser/firefox/distribution"
 POLICY_FILE="$POLICY_DIR/policies.json"
 
@@ -690,8 +690,12 @@ if [ ! -x "$FIREFOX" ]; then
 fi
 
 mkdir -p "$PROFILE"
-mkdir -p "$PROFILE/chrome"
 mkdir -p "$POLICY_DIR"
+
+if [ ! -f "$NEW_TAB_XPI" ]; then
+    echo "Erro: lynx-newtab.xpi não encontrado."
+    exit 1
+fi
 
 NEW_TAB_XPI_ABS="$(readlink -f "$NEW_TAB_XPI")"
 
@@ -708,6 +712,7 @@ cat > "$POLICY_FILE" <<POLICY_EOF
     }
 }
 POLICY_EOF
+mkdir -p "$PROFILE/chrome"
 
 # Gera policies.json com caminho absoluto desta instalação
 DIST_DIR="$BASE/browser/firefox/distribution"
@@ -783,10 +788,8 @@ echo "========================================="
 exec "$FIREFOX" \
     --no-remote \
     --profile "$PROFILE" \
-    --name "LynxBrowser" \
     "$HOME_PAGE" \
     "$@"
-LYNX_EOF
 
 chmod +x "$APP/lynx"
 
