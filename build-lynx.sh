@@ -565,6 +565,37 @@ function abrir(url){ window.location.href=url; }
 </html>
 HOME_EOF
 
+echo "Criando extensão New Tab..."
+
+NEW_TAB="$WORK/$APP/config/lynx-newtab"
+rm -rf "$NEW_TAB"
+mkdir -p "$NEW_TAB"
+
+cat > "$NEW_TAB/manifest.json" <<'EOF'
+{
+    "manifest_version": 3,
+    "name": "Lynx New Tab",
+    "version": "1.0",
+    "description": "New Tab do Lynx Browser.",
+    "browser_specific_settings": {
+        "gecko": {
+            "id": "lynx-newtab@lynxbrowser"
+        }
+    },
+    "chrome_url_overrides": {
+        "newtab": "home.html"
+    }
+}
+EOF
+
+cp "$APP/config/home.html" "$NEW_TAB/home.html"
+
+cd "$NEW_TAB"
+zip -qr "$APP/config/lynx-newtab.xpi" .
+cd "$WORK"
+
+rm -rf "$NEW_TAB"
+
 cd "$WORK"
 
 echo "[1/6] Baixando Firefox oficial..."
@@ -649,7 +680,10 @@ set -euo pipefail
 BASE="$(cd "$(dirname "$0")" && pwd)"
 FIREFOX="$BASE/browser/firefox/firefox"
 PROFILE="$BASE/profile"
-HOME_PAGE="file://$BASE/config/home.html"
+HOME_PAGE="$BASE/config/home.html"
+NEW_TAB_XPI="$BASE/config/lynx-newtab.xpi"
+POLICY_DIR="$BASE/browser/firefox/distribution"
+POLICY_FILE="$POLICY_DIR/policies.json"
 
 if [ ! -x "$FIREFOX" ]; then
     echo "Erro: Firefox não encontrado."
@@ -658,6 +692,23 @@ fi
 
 mkdir -p "$PROFILE"
 mkdir -p "$PROFILE/chrome"
+mkdir -p "$POLICY_DIR"
+
+NEW_TAB_XPI_ABS="$(readlink -f "$NEW_TAB_XPI")"
+
+cat > "$POLICY_FILE" <<POLICY_EOF
+{
+    "policies": {
+        "ExtensionSettings": {
+            "lynx-newtab@lynxbrowser": {
+                "installation_mode": "force_installed",
+                "install_url": "file://$NEW_TAB_XPI_ABS",
+                "updates_disabled": true
+            }
+        }
+    }
+}
+POLICY_EOF
 
 # Gera policies.json com caminho absoluto desta instalação
 DIST_DIR="$BASE/browser/firefox/distribution"
