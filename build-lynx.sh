@@ -15,13 +15,30 @@ mkdir -p "$WORK/$APP/browser"
 mkdir -p "$WORK/$APP/profile"
 mkdir -p "$WORK/$APP/config"
 
-cat > "$WORK/$APP/config/home.html" <<'HOME_EOF'
+# Baixa a logo automaticamente se não existir
+if [ ! -f "$PWD/lynx-logo.png" ]; then
+    echo "Baixando logo do Lynx..."
+    curl -L "https://raw.githubusercontent.com/Pax0102/img/main/1.png" -o "$PWD/lynx-logo.png"
+fi
+
+# Converte a logo para base64 para embutir no HTML
+LOGO_B64=$(base64 -w 0 "$PWD/lynx-logo.png")
+
+# Copia a logo para a config
+cp "$PWD/lynx-logo.png" "$WORK/$APP/config/lynx-logo.png"
+
+# Gera o home.html com a logo embutida em base64
+cat > "$WORK/$APP/config/home.html" << HOME_EOF
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Lynx Browser</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
 <style>
 *{
@@ -30,247 +47,522 @@ cat > "$WORK/$APP/config/home.html" <<'HOME_EOF'
     box-sizing:border-box;
 }
 
-body{
+:root{
+    --black:#050506;
+    --panel:#0b0c0f;
+    --panel-hi:#121319;
+    --line:rgba(255,255,255,.09);
+    --line-soft:rgba(255,255,255,.05);
+    --blue:#1d4fea;
+    --blue-bright:#3f6dff;
+    --blue-deep:#081b66;
+    --ice:#eef1f8;
+    --slate:#838a9a;
+    --slate-dim:#484e5c;
+    --font-display:'Sora',Arial,sans-serif;
+    --font-body:'Inter',Arial,sans-serif;
+    --font-mono:'JetBrains Mono',monospace;
+    --mx:50%;
+    --my:40%;
+}
+
+html,body{
     width:100%;
-    height:100vh;
+    height:100%;
     overflow:hidden;
+}
+
+body{
+    background:var(--black);
+    color:var(--ice);
+    font-family:var(--font-body);
+}
+
+@media(prefers-reduced-motion:reduce){
+    *,*::before,*::after{
+        animation-duration:.001ms !important;
+        animation-iteration-count:1 !important;
+        transition-duration:.001ms !important;
+    }
+}
+
+.background{
+    position:fixed;
+    inset:0;
+    overflow:hidden;
+    pointer-events:none;
+    z-index:0;
+}
+
+.bg-base{ position:absolute; inset:0; background:var(--black); }
+
+.bg-glow{
+    position:absolute;
+    inset:0;
+    background:radial-gradient(ellipse 60% 50% at 50% 12%,rgba(29,79,234,.22),transparent 60%);
+}
+
+.bg-glow-soft{
+    position:absolute;
+    inset:0;
+    background:radial-gradient(circle 480px at var(--mx) var(--my),rgba(63,109,255,.06),transparent 70%);
+    transition:background .08s linear;
+}
+
+.hairlines{
+    position:absolute;
+    inset:0;
+    opacity:.5;
+    background-image:repeating-linear-gradient(115deg,rgba(255,255,255,.025) 0px,rgba(255,255,255,.025) 1px,transparent 1px,transparent 84px);
+}
+
+.grain{
+    position:absolute;
+    inset:0;
+    opacity:.05;
+    mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.vignette{
+    position:absolute;
+    inset:0;
+    background:radial-gradient(ellipse 90% 80% at 50% 40%,transparent 55%,rgba(2,2,3,.6) 100%);
+    box-shadow:inset 0 0 160px rgba(0,0,0,.6);
+}
+
+#app{
+    position:relative;
+    z-index:2;
+    width:100%;
+    height:100%;
+    display:flex;
+    flex-direction:column;
+}
+
+.reveal{
+    opacity:0;
+    transform:translateY(14px);
+    animation:reveal .7s cubic-bezier(.2,.7,.2,1) forwards;
+}
+
+@keyframes reveal{
+    to{ opacity:1; transform:translateY(0); }
+}
+
+.navbar{
+    height:78px;
+    flex-shrink:0;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:0 40px;
+    border-bottom:1px solid var(--line-soft);
+}
+
+.brand{ display:flex; align-items:center; gap:12px; }
+
+.brand-mark{
+    width:34px;
+    height:34px;
+    object-fit:contain;
+    filter:drop-shadow(0 0 10px rgba(29,79,234,.5));
+}
+
+.brand-name{
+    font-family:var(--font-display);
+    font-size:18px;
+    font-weight:700;
+    letter-spacing:-.3px;
+}
+
+.brand-name b{ color:var(--blue-bright); font-weight:800; }
+
+.nav-right{ display:flex; align-items:center; gap:10px; }
+
+.pill{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    padding:8px 14px;
+    border:1px solid var(--line);
+    background:var(--panel);
+    font-family:var(--font-mono);
+    font-size:11px;
+    letter-spacing:.6px;
+    color:var(--slate);
+    clip-path:polygon(0 0,100% 0,100% 100%,10px 100%,0 calc(100% - 10px));
+}
+
+.pill.status{ color:#8fb4ff; }
+
+.dot{
+    width:6px;
+    height:6px;
+    border-radius:50%;
+    background:var(--blue-bright);
+    box-shadow:0 0 8px var(--blue-bright);
+    animation:blink 2.4s ease-in-out infinite;
+}
+
+@keyframes blink{
+    0%,100%{ opacity:1; }
+    50%{ opacity:.35; }
+}
+
+.main{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    padding-bottom:56px;
+    position:relative;
+}
+
+.logo-stage{
+    position:relative;
+    width:168px;
+    height:168px;
     display:flex;
     align-items:center;
     justify-content:center;
-    background:
-        radial-gradient(circle at 50% 40%,#06295c 0%,#02050a 38%,#000 100%);
-    color:white;
-    font-family:Arial,sans-serif;
+    margin-bottom:18px;
 }
 
-.container{
-    width:90%;
-    max-width:700px;
-    text-align:center;
+.logo-pedestal{
+    position:absolute;
+    inset:0;
+    background:linear-gradient(160deg,var(--panel-hi),var(--panel) 70%);
+    border:1px solid var(--line);
+    clip-path:polygon(22px 0,100% 0,100% calc(100% - 22px),calc(100% - 22px) 100%,0 100%,0 22px);
+    box-shadow:0 30px 70px rgba(0,0,0,.55),inset 0 1px rgba(255,255,255,.05);
+    overflow:hidden;
 }
 
-.logo{
-    width:150px;
-    height:150px;
-    object-fit:cover;
-    border-radius:28px;
-    margin-bottom:28px;
-    box-shadow:
-        0 0 35px rgba(0,110,255,.45),
-        0 20px 50px rgba(0,0,0,.7);
-    animation:float 4s ease-in-out infinite;
+.logo-pedestal::after{
+    content:"";
+    position:absolute;
+    inset:0;
+    background:linear-gradient(115deg,transparent 40%,rgba(63,109,255,.25) 50%,transparent 60%);
+    background-size:250% 250%;
+    animation:sheen 5s ease-in-out infinite;
+    mix-blend-mode:screen;
 }
 
-@keyframes float{
-    0%,100%{
-        transform:translateY(0);
-    }
-    50%{
-        transform:translateY(-8px);
-    }
+@keyframes sheen{
+    0%,100%{ background-position:130% -30%; }
+    50%{ background-position:-30% 130%; }
+}
+
+.logo-img{
+    position:relative;
+    width:104px;
+    height:104px;
+    object-fit:contain;
+    filter:drop-shadow(0 8px 26px rgba(29,79,234,.5));
+    animation:hover 6s ease-in-out infinite;
+}
+
+@keyframes hover{
+    0%,100%{ transform:translateY(0); }
+    50%{ transform:translateY(-6px); }
 }
 
 h1{
-    font-size:52px;
-    font-weight:800;
-    letter-spacing:-3px;
+    font-family:var(--font-display);
+    font-size:42px;
+    font-weight:700;
+    letter-spacing:-1.5px;
+    text-align:center;
 }
 
-h1 span{
-    color:#1683ff;
-}
+h1 b{ color:var(--blue-bright); font-weight:800; }
 
 .subtitle{
+    color:var(--slate);
     margin-top:10px;
-    color:#718096;
     font-size:15px;
+    letter-spacing:.1px;
 }
 
 .search-box{
+    width:min(620px,86vw);
+    margin-top:34px;
     position:relative;
-    margin-top:35px;
+}
+
+.search-frame{
+    position:relative;
+    background:var(--panel);
+    border:1px solid var(--line);
+    clip-path:polygon(0 0,calc(100% - 24px) 0,100% 24px,100% 100%,0 100%);
+    transition:border-color .25s ease,box-shadow .25s ease;
+}
+
+.search-frame:focus-within{
+    border-color:rgba(63,109,255,.55);
+    box-shadow:0 0 0 3px rgba(29,79,234,.12),0 20px 50px rgba(0,0,0,.4);
+}
+
+.search-frame::before{
+    content:"";
+    position:absolute;
+    top:0;
+    right:0;
+    width:24px;
+    height:24px;
+    background:linear-gradient(135deg,var(--blue-deep),var(--blue));
+    clip-path:polygon(100% 0,100% 100%,0 0);
+    opacity:.9;
 }
 
 .search{
     width:100%;
-    height:62px;
-    padding:0 25px;
-    border-radius:18px;
-    border:1px solid rgba(22,131,255,.25);
-    background:rgba(5,10,18,.85);
-    color:white;
+    height:60px;
+    padding:0 60px 0 54px;
+    border:none;
     outline:none;
-    font-size:16px;
-    box-shadow:0 20px 50px rgba(0,0,0,.4);
-    transition:.25s;
+    background:transparent;
+    color:var(--ice);
+    font-size:15px;
+    font-family:var(--font-body);
 }
 
-.search:focus{
-    border-color:#1683ff;
-    box-shadow:
-        0 0 0 4px rgba(22,131,255,.1),
-        0 20px 60px rgba(0,0,0,.5);
+.search::placeholder{ color:var(--slate-dim); }
+
+.search-icon{
+    position:absolute;
+    left:22px;
+    top:50%;
+    transform:translateY(-50%);
+    color:var(--blue-bright);
+    font-size:18px;
+    pointer-events:none;
 }
 
-.search::placeholder{
-    color:#59677a;
+.search-enter{
+    position:absolute;
+    right:16px;
+    top:50%;
+    transform:translateY(-50%);
+    padding:7px 10px;
+    background:var(--panel-hi);
+    border:1px solid var(--line);
+    color:var(--slate);
+    font-family:var(--font-mono);
+    font-size:10px;
+    letter-spacing:1px;
+    pointer-events:none;
 }
 
 .shortcuts{
-    margin-top:25px;
     display:flex;
-    justify-content:center;
-    gap:12px;
+    gap:10px;
+    margin-top:24px;
     flex-wrap:wrap;
+    justify-content:center;
+    width:min(620px,86vw);
 }
 
 .shortcut{
-    padding:11px 18px;
-    border-radius:12px;
-    border:1px solid rgba(255,255,255,.07);
-    background:rgba(255,255,255,.035);
-    color:#8290a3;
+    display:flex;
+    align-items:center;
+    gap:9px;
+    min-width:118px;
+    padding:13px 16px;
+    background:var(--panel);
+    border:1px solid var(--line);
+    clip-path:polygon(0 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%);
+    color:var(--slate);
+    font-size:13px;
+    font-family:var(--font-body);
+    font-weight:500;
     cursor:pointer;
-    transition:.2s;
+    transition:border-color .2s ease,color .2s ease,transform .2s ease,background .2s ease;
 }
 
-.shortcut:hover{
-    color:white;
-    border-color:#1683ff;
-    background:rgba(22,131,255,.08);
-    transform:translateY(-3px);
+.shortcut:hover,
+.shortcut:focus-visible{
+    color:var(--ice);
+    border-color:rgba(63,109,255,.45);
+    background:var(--panel-hi);
+    transform:translateY(-2px);
 }
+
+.shortcut:focus-visible,
+.search:focus-visible{
+    outline:2px solid var(--blue-bright);
+    outline-offset:2px;
+}
+
+.shortcut-icon{ font-size:15px; color:var(--blue-bright); }
 
 .footer{
-    position:fixed;
-    bottom:20px;
-    color:#394454;
-    font-size:11px;
+    padding-bottom:26px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:12px;
+    color:var(--slate-dim);
+    font-family:var(--font-mono);
+    font-size:10.5px;
+    letter-spacing:.6px;
 }
 
-.footer span{
-    color:#1683ff;
+.footer-rule{
+    width:100%;
+    max-width:960px;
+    height:1px;
+    background:linear-gradient(90deg,transparent,var(--line) 20%,var(--line) 80%,transparent);
+}
+
+.footer b{ color:#5f7dcf; }
+
+@media(max-width:600px){
+    .navbar{ padding:0 18px; }
+    .pill.clock{ display:none; }
+    h1{ font-size:32px; }
+    .subtitle{ text-align:center; padding:0 24px; }
+    .search-box{ width:90vw; }
+    .shortcuts{ width:90vw; }
+    .logo-stage{ width:130px; height:130px; }
+    .logo-img{ width:82px; height:82px; }
 }
 </style>
 </head>
 
 <body>
 
-<div class="container">
-
-    <img
-        class="logo"
-        src="lynx-logo.png"
-        alt="Lynx"
-    >
-
-    <h1>Bem-vindo ao <span>Lynx</span></h1>
-
-    <p class="subtitle">
-        Navegue rápido. Navegue do seu jeito.
-    </p>
-
-    <div class="search-box">
-
-        <input
-            id="search"
-            class="search"
-            type="text"
-            placeholder="Pesquisar na web ou digitar um endereço..."
-            autofocus
-        >
-
-    </div>
-
-    <div class="shortcuts">
-
-        <div class="shortcut"
-             onclick="abrir('https://duckduckgo.com')">
-            🔎 DuckDuckGo
-        </div>
-
-        <div class="shortcut"
-             onclick="abrir('https://www.youtube.com')">
-            ▶ YouTube
-        </div>
-
-        <div class="shortcut"
-             onclick="abrir('https://github.com')">
-            GitHub
-        </div>
-
-        <div class="shortcut"
-             onclick="abrir('https://www.google.com')">
-            Google
-        </div>
-
-    </div>
-
+<div class="background">
+    <div class="bg-base"></div>
+    <div class="bg-glow"></div>
+    <div class="bg-glow-soft"></div>
+    <div class="hairlines"></div>
+    <div class="grain"></div>
+    <div class="vignette"></div>
 </div>
 
-<div class="footer">
-    Lynx Browser <span>•</span> Fast • Private • Simple
+<div id="app">
+
+    <nav class="navbar reveal" style="animation-delay:.05s">
+        <div class="brand">
+            <img class="brand-mark" src="data:image/png;base64,${LOGO_B64}" alt="LX logo">
+            <div class="brand-name">Lynx <b>Browser</b></div>
+        </div>
+        <div class="nav-right">
+            <div class="pill clock" id="clock">--:--:--</div>
+            <div class="pill status">
+                <span class="dot"></span>
+                Navegação protegida
+            </div>
+        </div>
+    </nav>
+
+    <main class="main">
+
+        <div class="logo-stage reveal" style="animation-delay:.15s">
+            <div class="logo-pedestal"></div>
+            <img class="logo-img" src="data:image/png;base64,${LOGO_B64}" alt="LX logo">
+        </div>
+
+        <h1 class="reveal" style="animation-delay:.22s">
+            Bem-vindo ao <b>Lynx</b>
+        </h1>
+
+        <p class="subtitle reveal" style="animation-delay:.28s">
+            Navegue rápido. Navegue do seu jeito.
+        </p>
+
+        <div class="search-box reveal" style="animation-delay:.34s">
+            <div class="search-frame">
+                <div class="search-icon">⌕</div>
+                <input
+                    class="search"
+                    id="search"
+                    type="text"
+                    placeholder="Pesquise na web ou digite um endereço..."
+                    autocomplete="off"
+                    autofocus
+                >
+                <div class="search-enter">ENTER</div>
+            </div>
+        </div>
+
+        <div class="shortcuts reveal" style="animation-delay:.4s">
+            <div class="shortcut" tabindex="0" onclick="abrir('https://duckduckgo.com')">
+                <span class="shortcut-icon">🔎</span>
+                DuckDuckGo
+            </div>
+            <div class="shortcut" tabindex="0" onclick="abrir('https://www.youtube.com')">
+                <span class="shortcut-icon">▶</span>
+                YouTube
+            </div>
+            <div class="shortcut" tabindex="0" onclick="abrir('https://www.tiktok.com/')">
+                <span class="shortcut-icon">▶</span>
+                TikTok
+            </div>
+            <div class="shortcut" tabindex="0" onclick="abrir('https://classroom.google.com/')">
+                <span class="shortcut-icon">⌘</span>
+                Classroom
+            </div>
+        </div>
+
+    </main>
+
+    <div class="footer reveal" style="animation-delay:.46s">
+        <div class="footer-rule"></div>
+        <div>LYNX BROWSER <b>·</b> RÁPIDO · PRIVADO · DIRETO</div>
+    </div>
+
 </div>
 
 <script>
-function pesquisar(){
-
-    const texto =
-        document.getElementById("search").value.trim();
-
-    if(!texto)
-        return;
-
-    if(
-        texto.startsWith("http://") ||
-        texto.startsWith("https://")
-    ){
-
-        window.location.href = texto;
-
-    }else if(
-        texto.includes(".") &&
-        !texto.includes(" ")
-    ){
-
-        window.location.href = "https://" + texto;
-
-    }else{
-
-        window.location.href =
-            "https://duckduckgo.com/?q=" +
-            encodeURIComponent(texto);
-
-    }
+function atualizarRelogio(){
+    const agora=new Date();
+    const h=String(agora.getHours()).padStart(2,"0");
+    const m=String(agora.getMinutes()).padStart(2,"0");
+    const s=String(agora.getSeconds()).padStart(2,"0");
+    document.getElementById("clock").textContent=h+":"+m+":"+s;
 }
+atualizarRelogio();
+setInterval(atualizarRelogio,1000);
 
-function abrir(url){
-    window.location.href = url;
-}
-
-document
-    .getElementById("search")
-    .addEventListener("keydown",function(e){
-
-        if(e.key === "Enter"){
-            pesquisar();
-        }
-
+const root=document.documentElement;
+const reduceMotion=window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+if(!reduceMotion){
+    window.addEventListener("mousemove",function(e){
+        const xp=(e.clientX/window.innerWidth*100).toFixed(2);
+        const yp=(e.clientY/window.innerHeight*100).toFixed(2);
+        root.style.setProperty("--mx",xp+"%");
+        root.style.setProperty("--my",yp+"%");
     });
+}
+
+function pesquisar(){
+    const texto=document.getElementById("search").value.trim();
+    if(!texto) return;
+    let destino;
+    if(texto.startsWith("http://")||texto.startsWith("https://")){
+        destino=texto;
+    }else if(texto.includes(".")&&!texto.includes(" ")){
+        destino="https://"+texto;
+    }else{
+        destino="https://duckduckgo.com/?q="+encodeURIComponent(texto);
+    }
+    window.location.href=destino;
+}
+
+document.getElementById("search").addEventListener("keydown",function(e){
+    if(e.key==="Enter") pesquisar();
+});
+
+function abrir(url){ window.location.href=url; }
 </script>
 
 </body>
 </html>
 HOME_EOF
-
-# Baixa a logo automaticamente se não existir
-if [ ! -f "$PWD/lynx-logo.png" ]; then
-    echo "Baixando logo do Lynx..."
-    curl -L "https://raw.githubusercontent.com/Pax0102/img/main/1.png" -o "$PWD/lynx-logo.png"
-fi
-
-# Copia a logo para a config e substitui o ícone do Firefox
-cp "$PWD/lynx-logo.png" "$WORK/$APP/config/lynx-logo.png"
 
 cd "$WORK"
 
@@ -283,17 +575,14 @@ curl -L \
 echo "[2/6] Extraindo motor do navegador..."
 
 tar -xJf firefox.tar.xz
-
 mv firefox "$APP/browser/firefox"
-
 rm firefox.tar.xz
 
-ICON_PATH=$(find "$APP/browser/firefox" -name "mozicon128.png" 2>/dev/null | head -1)
-if [ -n "$ICON_PATH" ]; then
-    cp "$APP/config/lynx-logo.png" "$ICON_PATH"
-else
-    echo "Aviso: ícone do Firefox não encontrado, pulando substituição."
-fi
+# Substitui ícones do Firefox pela logo do Lynx
+echo "Substituindo ícones do Firefox..."
+find "$APP/browser/firefox" -name "*.png" | grep -i "icon\|logo\|mozicon" | while read -r f; do
+    cp "$APP/config/lynx-logo.png" "$f" 2>/dev/null || true
+done
 
 echo "[3/6] Criando configuração..."
 
@@ -301,30 +590,6 @@ cat > "$APP/config/vpn.conf" <<'EOF'
 # ==========================================================
 # LYNX BROWSER - VPN / SOCKS5
 # ==========================================================
-#
-# ATENÇÃO:
-# Isto é um proxy SOCKS5. Para funcionar você precisa
-# informar um servidor SOCKS5 real.
-#
-# Exemplos:
-#
-# HOST=127.0.0.1
-# PORT=9050
-#
-# ou:
-#
-# HOST=meu-servidor.com
-# PORT=1080
-#
-# Para desligar:
-# ENABLED=0
-#
-# Para ligar:
-# ENABLED=1
-#
-# DNS também será enviado pelo SOCKS5.
-# ==========================================================
-
 ENABLED=0
 HOST=127.0.0.1
 PORT=1080
@@ -335,37 +600,23 @@ EOF
 echo "[4/6] Criando perfil privado do Lynx..."
 
 cat > "$APP/profile/user.js" <<'EOF'
-// ============================================
 // LYNX BROWSER - PRIVACY SETTINGS
-// ============================================
-
 user_pref("browser.startup.homepage", "https://duckduckgo.com/");
 user_pref("browser.newtabpage.enabled", false);
-
 user_pref("privacy.trackingprotection.enabled", true);
 user_pref("privacy.trackingprotection.pbmode.enabled", true);
 user_pref("privacy.trackingprotection.socialtracking.enabled", true);
-
 user_pref("privacy.partition.network_state", true);
 user_pref("privacy.partition.network_state.ocsp_cache", true);
-
 user_pref("network.trr.mode", 5);
-
 user_pref("browser.send_pings", false);
 user_pref("dom.battery.enabled", false);
-
 user_pref("media.peerconnection.enabled", false);
-
 user_pref("network.dns.disableIPv6", false);
-
 user_pref("browser.sessionstore.resume_from_crash", false);
-
 user_pref("browser.shell.checkDefaultBrowser", false);
 user_pref("browser.warnOnQuit", false);
-
 user_pref("browser.cache.disk.enable", true);
-
-// Habilitar userChrome.css
 user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);
 EOF
 
@@ -373,63 +624,16 @@ echo "[5/6] Criando controle de VPN..."
 
 cat > "$APP/vpn" <<'EOF'
 #!/usr/bin/env bash
-
 set -e
-
 BASE="$(cd "$(dirname "$0")" && pwd)"
 CONF="$BASE/config/vpn.conf"
-
-if [ ! -f "$CONF" ]; then
-    echo "Arquivo de configuração não encontrado."
-    exit 1
-fi
-
+if [ ! -f "$CONF" ]; then echo "Arquivo de configuração não encontrado."; exit 1; fi
 case "${1:-status}" in
-
-    on)
-        sed -i 's/^ENABLED=.*/ENABLED=1/' "$CONF"
-        echo "VPN/Proxy: ATIVADO"
-        echo
-        echo "Servidor:"
-        grep '^HOST=' "$CONF"
-        grep '^PORT=' "$CONF"
-        echo
-        echo "O navegador precisa ser reiniciado."
-        ;;
-
-    off)
-        sed -i 's/^ENABLED=.*/ENABLED=0/' "$CONF"
-        echo "VPN/Proxy: DESATIVADO"
-        echo
-        echo "O navegador precisa ser reiniciado."
-        ;;
-
-    status)
-        source "$CONF"
-
-        if [ "${ENABLED:-0}" = "1" ]; then
-            echo "VPN/Proxy: ATIVADO"
-            echo "Servidor: $HOST:$PORT"
-        else
-            echo "VPN/Proxy: DESATIVADO"
-        fi
-        ;;
-
-    config)
-        nano "$CONF"
-        ;;
-
-    *)
-        echo
-        echo "Lynx VPN"
-        echo
-        echo "Uso:"
-        echo "  ./vpn on       Ativar"
-        echo "  ./vpn off      Desativar"
-        echo "  ./vpn status   Ver estado"
-        echo "  ./vpn config   Editar servidor"
-        echo
-        ;;
+    on)  sed -i 's/^ENABLED=.*/ENABLED=1/' "$CONF"; echo "VPN/Proxy: ATIVADO. Reinicie o navegador." ;;
+    off) sed -i 's/^ENABLED=.*/ENABLED=0/' "$CONF"; echo "VPN/Proxy: DESATIVADO. Reinicie o navegador." ;;
+    status) source "$CONF"; [ "${ENABLED:-0}" = "1" ] && echo "VPN/Proxy: ATIVADO - $HOST:$PORT" || echo "VPN/Proxy: DESATIVADO" ;;
+    config) nano "$CONF" ;;
+    *) echo "Uso: ./vpn on | off | status | config" ;;
 esac
 EOF
 
@@ -439,13 +643,12 @@ echo "[6/6] Criando executável do navegador..."
 
 cat > "$APP/lynx" <<'LYNX_EOF'
 #!/usr/bin/env bash
-
 set -euo pipefail
 
 BASE="$(cd "$(dirname "$0")" && pwd)"
 FIREFOX="$BASE/browser/firefox/firefox"
 PROFILE="$BASE/profile"
-HOME_PAGE="$BASE/config/home.html"
+HOME_PAGE="file://$BASE/config/home.html"
 
 if [ ! -x "$FIREFOX" ]; then
     echo "Erro: Firefox não encontrado."
@@ -458,7 +661,10 @@ mkdir -p "$PROFILE/chrome"
 cat > "$PROFILE/user.js" <<'USERJS_EOF'
 /* Lynx Browser - Configurações */
 
-user_pref("browser.startup.homepage", "https://duckduckgo.com/");
+/* Nova aba abre a página do Lynx */
+user_pref("browser.newtab.url", "about:blank");
+user_pref("browser.newtabpage.enabled", false);
+user_pref("browser.startup.homepage", "about:blank");
 
 /* DNS-over-HTTPS - Cloudflare */
 user_pref("network.trr.mode", 2);
@@ -470,7 +676,6 @@ user_pref("privacy.trackingprotection.enabled", true);
 user_pref("privacy.trackingprotection.pbmode.enabled", true);
 user_pref("privacy.trackingprotection.socialtracking.enabled", true);
 user_pref("privacy.partition.network_state", true);
-
 user_pref("media.peerconnection.enabled", false);
 user_pref("dom.battery.enabled", false);
 user_pref("browser.send_pings", false);
@@ -483,33 +688,57 @@ user_pref("extensions.activeThemeID", "firefox-compact-dark@mozilla.org");
 
 /* Habilitar userChrome.css */
 user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);
+
+/* Desativa boas-vindas do Firefox */
+user_pref("browser.startup.firstrunSkipsHomepage", true);
+user_pref("browser.disableResetPrompt", true);
+user_pref("browser.once.prereg", true);
+user_pref("datareporting.policy.dataSubmissionPolicyBypassNotification", true);
+user_pref("browser.shell.checkDefaultBrowser", false);
+user_pref("browser.warnOnQuit", false);
+user_pref("browser.sessionstore.resume_from_crash", false);
+user_pref("startup.homepage_welcome_url", "");
+user_pref("startup.homepage_welcome_url.additional", "");
+user_pref("startup.homepage_override_url", "");
+user_pref("browser.startup.upgradeDialog.enabled", false);
 USERJS_EOF
 
-# Esconde "Firefox" na barra de título e menus
+# Esconde referências ao Firefox na interface
 cat > "$PROFILE/chrome/userChrome.css" <<'CSS_EOF'
 /* Lynx Browser - Remove referências ao Firefox */
-
-/* Esconde o nome Firefox no menu principal */
 #appMenu-protonMainView .panel-header h1,
 #appMenu-protonMainView .panel-header description {
     visibility: collapse !important;
 }
-
-/* Remove "Firefox" da barra de título */
 #titlebar {
     -moz-appearance: none !important;
 }
-
-/* Esconde o logo do Firefox no menu */
 #PanelUI-menu-button .toolbarbutton-icon {
     list-style-image: none !important;
 }
-
-/* Esconde "Mozilla Firefox" na tela About */
 #aboutHeaderLearnMore {
     display: none !important;
 }
 CSS_EOF
+
+# Cria extensão para nova aba abrir o home.html do Lynx
+NEWTAB_DIR="$PROFILE/extensions/lynx-newtab@lynx"
+mkdir -p "$NEWTAB_DIR"
+
+cat > "$NEWTAB_DIR/manifest.json" <<MANIFEST_EOF
+{
+  "manifest_version": 2,
+  "name": "Lynx New Tab",
+  "version": "1.0",
+  "description": "Lynx Browser custom new tab",
+  "chrome_url_overrides": {
+    "newtab": "newtab.html"
+  },
+  "permissions": []
+}
+MANIFEST_EOF
+
+cp "$BASE/config/home.html" "$NEWTAB_DIR/newtab.html"
 
 echo "========================================="
 echo " LYNX BROWSER"
@@ -530,7 +759,6 @@ chmod +x "$APP/lynx"
 
 cat > "$APP/start.sh" <<'START_EOF'
 #!/usr/bin/env bash
-
 BASE="$(cd "$(dirname "$0")" && pwd)"
 exec "$BASE/lynx" "$@"
 START_EOF
@@ -545,21 +773,13 @@ cat > "$APP/README.txt" <<'README_EOF'
 Navegador Linux portátil.
 
 EXECUTAR:
-
     ./start.sh
 
 VPN / SOCKS5:
-
     ./vpn status
     ./vpn config
     ./vpn on
     ./vpn off
-
-IMPORTANTE:
-
-O modo VPN utiliza SOCKS5.
-
-Você precisa fornecer um servidor SOCKS5 real.
 
 ====================================================
 README_EOF
@@ -568,7 +788,6 @@ echo
 echo "Empacotando..."
 
 cd "$WORK"
-
 tar -czf "$OUT" "$APP"
 
 echo
@@ -576,20 +795,15 @@ echo "========================================="
 echo " BUILD CONCLUÍDO"
 echo "========================================="
 echo
-echo "Arquivo:"
-echo "$OUT"
-echo
-echo "Tamanho:"
+echo "Arquivo: $OUT"
 du -h "$OUT"
 echo
 echo "Descompactando o Lynx Browser..."
 
 INSTALL_DIR="$PWD/LynxBrowser"
-
 rm -rf "$INSTALL_DIR"
 tar -xzf "$OUT" -C "$PWD"
 
 echo
 echo "Iniciando o Lynx Browser..."
-
 exec "$INSTALL_DIR/start.sh"
