@@ -581,9 +581,6 @@ cat > "$NEW_TAB/manifest.json" <<'EOF'
         "gecko": {
             "id": "lynx-newtab@lynxbrowser"
         }
-    },
-    "chrome_url_overrides": {
-        "newtab": "home.html"
     }
 }
 EOF
@@ -713,11 +710,6 @@ cat > "$POLICY_FILE" <<POLICY_EOF
 }
 POLICY_EOF
 mkdir -p "$PROFILE/chrome"
-
-# Gera policies.json com caminho absoluto desta instalação
-DIST_DIR="$BASE/browser/firefox/distribution"
-mkdir -p "$DIST_DIR"
-printf '{\n  "policies": {\n    "NewTabPage": "file://%s/config/home.html",\n    "Homepage": {\n      "URL": "file://%s/config/home.html",\n      "Locked": true,\n      "StartPage": "homepage"\n    },\n    "OverrideFirstRunPage": "",\n    "OverridePostUpdatePage": "",\n    "DisableFirefoxStudies": true,\n    "DisableTelemetry": true\n  }\n}\n' "$BASE" "$BASE" > "$DIST_DIR/policies.json"
 
 # Gera user.js com caminho absoluto correto para esta instalação
 cat > "$PROFILE/user.js" <<USERJS_EOF
