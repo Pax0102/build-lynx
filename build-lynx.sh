@@ -657,13 +657,9 @@ fi
 mkdir -p "$PROFILE"
 mkdir -p "$PROFILE/chrome"
 
-cat > "$PROFILE/user.js" <<'USERJS_EOF'
+# Gera user.js com caminho absoluto correto para esta instalação
+cat > "$PROFILE/user.js" <<USERJS_EOF
 /* Lynx Browser - Configurações */
-
-/* Nova aba abre a página do Lynx */
-user_pref("browser.newtab.url", "about:blank");
-user_pref("browser.newtabpage.enabled", false);
-user_pref("browser.startup.homepage", "about:blank");
 
 /* DNS-over-HTTPS - Cloudflare */
 user_pref("network.trr.mode", 2);
@@ -691,7 +687,6 @@ user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);
 /* Desativa boas-vindas do Firefox */
 user_pref("browser.startup.firstrunSkipsHomepage", true);
 user_pref("browser.disableResetPrompt", true);
-user_pref("browser.once.prereg", true);
 user_pref("datareporting.policy.dataSubmissionPolicyBypassNotification", true);
 user_pref("browser.shell.checkDefaultBrowser", false);
 user_pref("browser.warnOnQuit", false);
@@ -701,6 +696,27 @@ user_pref("startup.homepage_welcome_url.additional", "");
 user_pref("startup.homepage_override_url", "");
 user_pref("browser.startup.upgradeDialog.enabled", false);
 USERJS_EOF
+
+# Gera policies.json com caminho absoluto correto para esta instalação
+DIST_DIR="$BASE/browser/firefox/distribution"
+mkdir -p "$DIST_DIR"
+cat > "$DIST_DIR/policies.json" <<POLICIES_EOF
+{
+  "policies": {
+    "NewTabPage": "file://$BASE/config/home.html",
+    "Homepage": {
+      "URL": "file://$BASE/config/home.html",
+      "Locked": true,
+      "StartPage": "homepage"
+    },
+    "OverrideFirstRunPage": "",
+    "OverridePostUpdatePage": "",
+    "DisableFirefoxStudies": true,
+    "DisableTelemetry": true,
+    "DisplayBookmarksToolbar": "never"
+  }
+}
+POLICIES_EOF
 
 # Esconde referências ao Firefox na interface
 cat > "$PROFILE/chrome/userChrome.css" <<'CSS_EOF'
@@ -719,28 +735,6 @@ cat > "$PROFILE/chrome/userChrome.css" <<'CSS_EOF'
     display: none !important;
 }
 CSS_EOF
-
-# Usa policies.json para forçar nova aba — funciona em Firefox moderno sem extensão assinada
-HOME_URL="file://${BASE}/config/home.html"
-DIST_DIR="$BASE/browser/firefox/distribution"
-mkdir -p "$DIST_DIR"
-cat > "$DIST_DIR/policies.json" <<POLICIES_EOF
-{
-  "policies": {
-    "NewTabPage": "${HOME_URL}",
-    "Homepage": {
-      "URL": "${HOME_URL}",
-      "Locked": true,
-      "StartPage": "homepage"
-    },
-    "DisplayBookmarksToolbar": "never",
-    "OverrideFirstRunPage": "",
-    "OverridePostUpdatePage": "",
-    "DisableFirefoxStudies": true,
-    "DisableTelemetry": true
-  }
-}
-POLICIES_EOF
 
 echo "========================================="
 echo " LYNX BROWSER"
