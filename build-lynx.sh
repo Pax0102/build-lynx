@@ -763,17 +763,17 @@ clip-path:polygon(0 0,100% 0,100% calc(100% - 14px),calc(100% - 14px) 100%,0 100
 <button class="opt" id="o-vpn" onclick="escolher('vpn')">
 <h2>COM <b>VPN</b></h2>
 <ul>
-<li>Extensão 1VPN, pré-configurada nos EUA</li>
-<li>Bloqueio de pornô, gore e NSFW, com a sua lista de sites</li>
-<li>SafeSearch na busca</li>
+<li>Abre qualquer tipo de site</li>
+<li>Possui atraso na abertura de paginas</li>
+<li>Possui ping alto em jogos multiplayer</li>
 </ul>
 </button>
 <button class="opt" id="o-novpn" onclick="escolher('novpn')">
 <h2>SEM <b>VPN</b></h2>
 <ul>
-<li>DNS criptografado (Cloudflare)</li>
-<li>Ícones do Lynx no lugar dos do Firefox</li>
-<li>Interface sem referências ao Firefox</li>
+<li>Abre maior parte de sites bloqueados</li>
+<li>Possui ping baixo em jogos multiplayer</li>
+<li>Possui pouco atraso na abertura de paginas</li>
 </ul>
 </button>
 </div>
