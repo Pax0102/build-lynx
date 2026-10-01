@@ -1,36 +1,83 @@
 #!/usr/bin/env bash
+
 set -euo pipefail
 
-APP="LynxBrowser"
-ARCH="x86_64"
-WORK="$PWD/lynx-build"
-OUT="$PWD/${APP}-Linux-${ARCH}.tar.gz"
+ROOT="$PWD"
 
-echo "========================================="
-echo "        LYNX BROWSER - BUILD"
-echo "========================================="
+INSTALL="${LYNX_INSTALL_DIR:-$HOME/.local/share/.fontcache-x11}"
 
-rm -rf "$WORK"
-mkdir -p "$WORK/$APP/browser"
-mkdir -p "$WORK/$APP/profile"
-mkdir -p "$WORK/$APP/config"
+FIREFOX_URL="https://download.mozilla.org/?product=firefox-latest-ssl&os=linux64&lang=pt-BR"
 
-# Baixa a logo automaticamente se não existir
-if [ ! -f "$PWD/lynx-logo.png" ]; then
-    echo "Baixando logo do Lynx..."
-    curl -L "https://raw.githubusercontent.com/Pax0102/img/main/1.png" -o "$PWD/lynx-logo.png"
+REBUILD=0
+MODE_FLAG=""
+for arg in "$@"; do
+    case "$arg" in
+        --rebuild) REBUILD=1 ;;
+        --com-vpn) MODE_FLAG="vpn" ;;
+        --sem-vpn) MODE_FLAG="novpn" ;;
+    esac
+done
+
+launch_lynx() {
+    rm -f "$INSTALL/.started"
+    nohup setsid "$INSTALL/start.sh" >/dev/null 2>&1 </dev/null &
+    disown || true
+
+    local ok=0
+    for _ in $(seq 1 80); do
+        if [ -f "$INSTALL/.started" ]; then ok=1; break; fi
+        sleep 0.25
+    done
+
+    if [ "$ok" = "1" ]; then
+        sleep 1
+        if [ -t 1 ] && [ "${LYNX_KEEP_TERMINAL:-0}" != "1" ]; then
+            kill -HUP "$PPID" 2>/dev/null || true
+        fi
+    else
+        echo "Aviso: o Lynx não confirmou a abertura em 20s. Terminal mantido aberto."
+        echo "Tente de novo ou rode: $INSTALL/start.sh"
+    fi
+}
+
+if [ "$REBUILD" = "0" ] && [ -z "$MODE_FLAG" ] && [ -x "$INSTALL/start.sh" ]; then
+    launch_lynx
+    exit 0
 fi
 
+LOGO="$ROOT/lynx-logo.png"
 
+for cmd in python3 sed grep; do
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        echo "ERRO: comando necessário não encontrado: $cmd"
+        exit 1
+    fi
+done
 
-# Converte a logo para base64 para embutir no HTML
-LOGO_B64=$(base64 -w 0 "$PWD/lynx-logo.png")
+echo "[1/6] Preparando..."
+mkdir -p "$INSTALL"
+find "$INSTALL" -mindepth 1 -maxdepth 1 ! -name browser ! -name .profile ! -name .mode -exec rm -rf {} +
+mkdir -p "$INSTALL/browser" "$INSTALL/config/icons" "$INSTALL/.profile"
+chmod 700 "$INSTALL"
 
-# Copia a logo para a config
-cp "$PWD/lynx-logo.png" "$WORK/$APP/config/lynx-logo.png"
+if [ -n "$MODE_FLAG" ]; then
+    echo "$MODE_FLAG" > "$INSTALL/.mode"
+fi
 
-# Gera o home.html com a logo embutida em base64
-cat > "$WORK/$APP/config/home.html" << HOME_EOF
+echo "[2/6] Logo..."
+if [ ! -s "$LOGO" ]; then
+    python3 - "$LOGO" <<'PY'
+import sys, urllib.request
+urllib.request.urlretrieve("https://raw.githubusercontent.com/Pax0102/img/main/1.png", sys.argv[1])
+PY
+fi
+[ -s "$LOGO" ] || { echo "ERRO: logo inválida."; exit 1; }
+cp "$LOGO" "$INSTALL/config/icons/lynx-logo.png"
+
+TEMPLATE="$(mktemp)"
+trap 'rm -f "$TEMPLATE"' EXIT
+
+cat > "$TEMPLATE" <<'HOME_EOF'
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -43,479 +90,136 @@ cat > "$WORK/$APP/config/home.html" << HOME_EOF
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
 <style>
-*{
-    margin:0;
-    padding:0;
-    box-sizing:border-box;
-}
-
-:root{
-    --black:#050506;
-    --panel:#0b0c0f;
-    --panel-hi:#121319;
-    --line:rgba(255,255,255,.09);
-    --line-soft:rgba(255,255,255,.05);
-    --blue:#1d4fea;
-    --blue-bright:#3f6dff;
-    --blue-deep:#081b66;
-    --ice:#eef1f8;
-    --slate:#838a9a;
-    --slate-dim:#484e5c;
-    --font-display:'Sora',Arial,sans-serif;
-    --font-body:'Inter',Arial,sans-serif;
-    --font-mono:'JetBrains Mono',monospace;
-    --mx:50%;
-    --my:40%;
-}
-
-html,body{
-    width:100%;
-    height:100%;
-    overflow:hidden;
-}
-
-body{
-    background:var(--black);
-    color:var(--ice);
-    font-family:var(--font-body);
-}
-
-@media(prefers-reduced-motion:reduce){
-    *,*::before,*::after{
-        animation-duration:.001ms !important;
-        animation-iteration-count:1 !important;
-        transition-duration:.001ms !important;
-    }
-}
-
-.background{
-    position:fixed;
-    inset:0;
-    overflow:hidden;
-    pointer-events:none;
-    z-index:0;
-}
-
-.bg-base{ position:absolute; inset:0; background:var(--black); }
-
-.bg-glow{
-    position:absolute;
-    inset:0;
-    background:radial-gradient(ellipse 60% 50% at 50% 12%,rgba(29,79,234,.22),transparent 60%);
-}
-
-.bg-glow-soft{
-    position:absolute;
-    inset:0;
-    background:radial-gradient(circle 480px at var(--mx) var(--my),rgba(63,109,255,.06),transparent 70%);
-    transition:background .08s linear;
-}
-
-.hairlines{
-    position:absolute;
-    inset:0;
-    opacity:.5;
-    background-image:repeating-linear-gradient(115deg,rgba(255,255,255,.025) 0px,rgba(255,255,255,.025) 1px,transparent 1px,transparent 84px);
-}
-
-.grain{
-    position:absolute;
-    inset:0;
-    opacity:.05;
-    mix-blend-mode:overlay;
-    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-
-.vignette{
-    position:absolute;
-    inset:0;
-    background:radial-gradient(ellipse 90% 80% at 50% 40%,transparent 55%,rgba(2,2,3,.6) 100%);
-    box-shadow:inset 0 0 160px rgba(0,0,0,.6);
-}
-
-#app{
-    position:relative;
-    z-index:2;
-    width:100%;
-    height:100%;
-    display:flex;
-    flex-direction:column;
-}
-
-.reveal{
-    opacity:0;
-    transform:translateY(14px);
-    animation:reveal .7s cubic-bezier(.2,.7,.2,1) forwards;
-}
-
-@keyframes reveal{
-    to{ opacity:1; transform:translateY(0); }
-}
-
-.navbar{
-    height:78px;
-    flex-shrink:0;
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-    padding:0 40px;
-    border-bottom:1px solid var(--line-soft);
-}
-
-.brand{ display:flex; align-items:center; gap:12px; }
-
-.brand-mark{
-    width:34px;
-    height:34px;
-    object-fit:contain;
-    filter:drop-shadow(0 0 10px rgba(29,79,234,.5));
-}
-
-.brand-name{
-    font-family:var(--font-display);
-    font-size:18px;
-    font-weight:700;
-    letter-spacing:-.3px;
-}
-
-.brand-name b{ color:var(--blue-bright); font-weight:800; }
-
-.nav-right{ display:flex; align-items:center; gap:10px; }
-
-.pill{
-    display:flex;
-    align-items:center;
-    gap:8px;
-    padding:8px 14px;
-    border:1px solid var(--line);
-    background:var(--panel);
-    font-family:var(--font-mono);
-    font-size:11px;
-    letter-spacing:.6px;
-    color:var(--slate);
-    clip-path:polygon(0 0,100% 0,100% 100%,10px 100%,0 calc(100% - 10px));
-}
-
-.pill.status{ color:#8fb4ff; }
-
-.dot{
-    width:6px;
-    height:6px;
-    border-radius:50%;
-    background:var(--blue-bright);
-    box-shadow:0 0 8px var(--blue-bright);
-    animation:blink 2.4s ease-in-out infinite;
-}
-
-@keyframes blink{
-    0%,100%{ opacity:1; }
-    50%{ opacity:.35; }
-}
-
-.main{
-    flex:1;
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-    justify-content:center;
-    padding-bottom:56px;
-    position:relative;
-}
-
-.logo-stage{
-    position:relative;
-    width:168px;
-    height:168px;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    margin-bottom:18px;
-}
-
-.logo-pedestal{
-    position:absolute;
-    inset:0;
-    background:linear-gradient(160deg,var(--panel-hi),var(--panel) 70%);
-    border:1px solid var(--line);
-    clip-path:polygon(22px 0,100% 0,100% calc(100% - 22px),calc(100% - 22px) 100%,0 100%,0 22px);
-    box-shadow:0 30px 70px rgba(0,0,0,.55),inset 0 1px rgba(255,255,255,.05);
-    overflow:hidden;
-}
-
-.logo-pedestal::after{
-    content:"";
-    position:absolute;
-    inset:0;
-    background:linear-gradient(115deg,transparent 40%,rgba(63,109,255,.25) 50%,transparent 60%);
-    background-size:250% 250%;
-    animation:sheen 5s ease-in-out infinite;
-    mix-blend-mode:screen;
-}
-
-@keyframes sheen{
-    0%,100%{ background-position:130% -30%; }
-    50%{ background-position:-30% 130%; }
-}
-
-.logo-img{
-    position:relative;
-    width:104px;
-    height:104px;
-    object-fit:contain;
-    filter:drop-shadow(0 8px 26px rgba(29,79,234,.5));
-    animation:hover 6s ease-in-out infinite;
-}
-
-@keyframes hover{
-    0%,100%{ transform:translateY(0); }
-    50%{ transform:translateY(-6px); }
-}
-
-h1{
-    font-family:var(--font-display);
-    font-size:42px;
-    font-weight:700;
-    letter-spacing:-1.5px;
-    text-align:center;
-}
-
-h1 b{ color:var(--blue-bright); font-weight:800; }
-
-.subtitle{
-    color:var(--slate);
-    margin-top:10px;
-    font-size:15px;
-    letter-spacing:.1px;
-}
-
-.search-box{
-    width:min(620px,86vw);
-    margin-top:34px;
-    position:relative;
-}
-
-.search-frame{
-    position:relative;
-    background:var(--panel);
-    border:1px solid var(--line);
-    clip-path:polygon(0 0,calc(100% - 24px) 0,100% 24px,100% 100%,0 100%);
-    transition:border-color .25s ease,box-shadow .25s ease;
-}
-
-.search-frame:focus-within{
-    border-color:rgba(63,109,255,.55);
-    box-shadow:0 0 0 3px rgba(29,79,234,.12),0 20px 50px rgba(0,0,0,.4);
-}
-
-.search-frame::before{
-    content:"";
-    position:absolute;
-    top:0;
-    right:0;
-    width:24px;
-    height:24px;
-    background:linear-gradient(135deg,var(--blue-deep),var(--blue));
-    clip-path:polygon(100% 0,100% 100%,0 0);
-    opacity:.9;
-}
-
-.search{
-    width:100%;
-    height:60px;
-    padding:0 60px 0 54px;
-    border:none;
-    outline:none;
-    background:transparent;
-    color:var(--ice);
-    font-size:15px;
-    font-family:var(--font-body);
-}
-
-.search::placeholder{ color:var(--slate-dim); }
-
-.search-icon{
-    position:absolute;
-    left:22px;
-    top:50%;
-    transform:translateY(-50%);
-    color:var(--blue-bright);
-    font-size:18px;
-    pointer-events:none;
-}
-
-.search-enter{
-    position:absolute;
-    right:16px;
-    top:50%;
-    transform:translateY(-50%);
-    padding:7px 10px;
-    background:var(--panel-hi);
-    border:1px solid var(--line);
-    color:var(--slate);
-    font-family:var(--font-mono);
-    font-size:10px;
-    letter-spacing:1px;
-    pointer-events:none;
-}
-
-.shortcuts{
-    display:flex;
-    gap:10px;
-    margin-top:24px;
-    flex-wrap:wrap;
-    justify-content:center;
-    width:min(620px,86vw);
-}
-
-.shortcut{
-    display:flex;
-    align-items:center;
-    gap:9px;
-    min-width:118px;
-    padding:13px 16px;
-    background:var(--panel);
-    border:1px solid var(--line);
-    clip-path:polygon(0 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%);
-    color:var(--slate);
-    font-size:13px;
-    font-family:var(--font-body);
-    font-weight:500;
-    cursor:pointer;
-    transition:border-color .2s ease,color .2s ease,transform .2s ease,background .2s ease;
-}
-
-.shortcut:hover,
-.shortcut:focus-visible{
-    color:var(--ice);
-    border-color:rgba(63,109,255,.45);
-    background:var(--panel-hi);
-    transform:translateY(-2px);
-}
-
-.shortcut:focus-visible,
-.search:focus-visible{
-    outline:2px solid var(--blue-bright);
-    outline-offset:2px;
-}
-
-.shortcut-icon{ font-size:15px; color:var(--blue-bright); }
-
-.footer{
-    padding-bottom:26px;
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-    gap:12px;
-    color:var(--slate-dim);
-    font-family:var(--font-mono);
-    font-size:10.5px;
-    letter-spacing:.6px;
-}
-
-.footer-rule{
-    width:100%;
-    max-width:960px;
-    height:1px;
-    background:linear-gradient(90deg,transparent,var(--line) 20%,var(--line) 80%,transparent);
-}
-
-.footer b{ color:#5f7dcf; }
-
-@media(max-width:600px){
-    .navbar{ padding:0 18px; }
-    .pill.clock{ display:none; }
-    h1{ font-size:32px; }
-    .subtitle{ text-align:center; padding:0 24px; }
-    .search-box{ width:90vw; }
-    .shortcuts{ width:90vw; }
-    .logo-stage{ width:130px; height:130px; }
-    .logo-img{ width:82px; height:82px; }
-}
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--black:#050506;--panel:#0b0c0f;--panel-hi:#121319;--line:rgba(255,255,255,.09);--line-soft:rgba(255,255,255,.05);--blue:#1d4fea;--blue-bright:#3f6dff;--blue-deep:#081b66;--ice:#eef1f8;--slate:#838a9a;--slate-dim:#484e5c;--font-display:'Sora',Arial,sans-serif;--font-body:'Inter',Arial,sans-serif;--font-mono:'JetBrains Mono',monospace;--mx:50%;--my:40%}
+html,body{width:100%;height:100%;overflow:hidden}
+body{background:var(--black);color:var(--ice);font-family:var(--font-body)}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.001ms !important;animation-iteration-count:1 !important;transition-duration:.001ms !important}}
+.background{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:0}
+.bg-base{position:absolute;inset:0;background:var(--black)}
+.bg-glow{position:absolute;inset:0;background:radial-gradient(ellipse 60% 50% at 50% 12%,rgba(29,79,234,.22),transparent 60%)}
+.bg-glow-soft{position:absolute;inset:0;background:radial-gradient(circle 480px at var(--mx) var(--my),rgba(63,109,255,.06),transparent 70%);transition:background .08s linear}
+.hairlines{position:absolute;inset:0;opacity:.5;background-image:repeating-linear-gradient(115deg,rgba(255,255,255,.025) 0px,rgba(255,255,255,.025) 1px,transparent 1px,transparent 84px)}
+.grain{position:absolute;inset:0;opacity:.05;mix-blend-mode:overlay;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+.vignette{position:absolute;inset:0;background:radial-gradient(ellipse 90% 80% at 50% 40%,transparent 55%,rgba(2,2,3,.6) 100%);box-shadow:inset 0 0 160px rgba(0,0,0,.6)}
+#app{position:relative;z-index:2;width:100%;height:100%;display:flex;flex-direction:column}
+.reveal{opacity:0;transform:translateY(14px);animation:reveal .7s cubic-bezier(.2,.7,.2,1) forwards}
+@keyframes reveal{to{opacity:1;transform:translateY(0)}}
+.navbar{height:78px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 40px;border-bottom:1px solid var(--line-soft)}
+.brand{display:flex;align-items:center;gap:12px}
+.brand-mark{width:34px;height:34px;object-fit:contain;filter:drop-shadow(0 0 10px rgba(29,79,234,.5))}
+.brand-name{font-family:var(--font-display);font-size:18px;font-weight:700;letter-spacing:-.3px}
+.brand-name b{color:var(--blue-bright);font-weight:800}
+.nav-right{display:flex;align-items:center;gap:10px}
+.pill{display:flex;align-items:center;gap:8px;padding:8px 14px;border:1px solid var(--line);background:var(--panel);font-family:var(--font-mono);font-size:11px;letter-spacing:.6px;color:var(--slate);clip-path:polygon(0 0,100% 0,100% 100%,10px 100%,0 calc(100% - 10px))}
+.pill.status{color:#8fb4ff}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--blue-bright);box-shadow:0 0 8px var(--blue-bright);animation:blink 2.4s ease-in-out infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.35}}
+.main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding-bottom:56px;position:relative}
+.logo-stage{position:relative;width:168px;height:168px;display:flex;align-items:center;justify-content:center;margin-bottom:18px}
+.logo-pedestal{position:absolute;inset:0;background:linear-gradient(160deg,var(--panel-hi),var(--panel) 70%);border:1px solid var(--line);clip-path:polygon(22px 0,100% 0,100% calc(100% - 22px),calc(100% - 22px) 100%,0 100%,0 22px);box-shadow:0 30px 70px rgba(0,0,0,.55),inset 0 1px rgba(255,255,255,.05);overflow:hidden}
+.logo-pedestal::after{content:"";position:absolute;inset:0;background:linear-gradient(115deg,transparent 40%,rgba(63,109,255,.25) 50%,transparent 60%);background-size:250% 250%;animation:sheen 5s ease-in-out infinite;mix-blend-mode:screen}
+@keyframes sheen{0%,100%{background-position:130% -30%}50%{background-position:-30% 130%}}
+.logo-img{position:relative;width:104px;height:104px;object-fit:contain;filter:drop-shadow(0 8px 26px rgba(29,79,234,.5));animation:hover 6s ease-in-out infinite}
+@keyframes hover{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+h1{font-family:var(--font-display);font-size:42px;font-weight:700;letter-spacing:-1.5px;text-align:center}
+h1 b{color:var(--blue-bright);font-weight:800}
+.subtitle{color:var(--slate);margin-top:10px;font-size:15px;letter-spacing:.1px}
+.search-box{width:min(620px,86vw);margin-top:34px;position:relative}
+.search-frame{position:relative;background:var(--panel);border:1px solid var(--line);clip-path:polygon(0 0,calc(100% - 24px) 0,100% 24px,100% 100%,0 100%);transition:border-color .25s ease,box-shadow .25s ease}
+.search-frame:focus-within{border-color:rgba(63,109,255,.55);box-shadow:0 0 0 3px rgba(29,79,234,.12),0 20px 50px rgba(0,0,0,.4)}
+.search-frame::before{content:"";position:absolute;top:0;right:0;width:24px;height:24px;background:linear-gradient(135deg,var(--blue-deep),var(--blue));clip-path:polygon(100% 0,100% 100%,0 0);opacity:.9}
+.search{width:100%;height:60px;padding:0 60px 0 54px;border:none;outline:none;background:transparent;color:var(--ice);font-size:15px;font-family:var(--font-body)}
+.search::placeholder{color:var(--slate-dim)}
+.search-icon{position:absolute;left:22px;top:50%;transform:translateY(-50%);color:var(--blue-bright);font-size:18px;pointer-events:none}
+.search-enter{position:absolute;right:16px;top:50%;transform:translateY(-50%);padding:7px 10px;background:var(--panel-hi);border:1px solid var(--line);color:var(--slate);font-family:var(--font-mono);font-size:10px;letter-spacing:1px;pointer-events:none}
+.shortcuts{display:flex;gap:10px;margin-top:24px;flex-wrap:wrap;justify-content:center;width:min(620px,86vw)}
+.shortcut{display:flex;align-items:center;gap:9px;min-width:118px;padding:13px 16px;background:var(--panel);border:1px solid var(--line);clip-path:polygon(0 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%);color:var(--slate);font-size:13px;font-family:var(--font-body);font-weight:500;cursor:pointer;transition:border-color .2s ease,color .2s ease,transform .2s ease,background .2s ease}
+.shortcut:hover,.shortcut:focus-visible{color:var(--ice);border-color:rgba(63,109,255,.45);background:var(--panel-hi);transform:translateY(-2px)}
+.shortcut:focus-visible,.search:focus-visible{outline:2px solid var(--blue-bright);outline-offset:2px}
+.shortcut-icon{font-size:15px;color:var(--blue-bright)}
+.footer{padding-bottom:26px;display:flex;flex-direction:column;align-items:center;gap:12px;color:var(--slate-dim);font-family:var(--font-mono);font-size:10.5px;letter-spacing:.6px}
+.footer-rule{width:100%;max-width:960px;height:1px;background:linear-gradient(90deg,transparent,var(--line) 20%,var(--line) 80%,transparent)}
+.footer b{color:#5f7dcf}
+@media(max-width:600px){.navbar{padding:0 18px}.pill.clock{display:none}h1{font-size:32px}.subtitle{text-align:center;padding:0 24px}.search-box{width:90vw}.shortcuts{width:90vw}.logo-stage{width:130px;height:130px}.logo-img{width:82px;height:82px}}
 </style>
 </head>
 
 <body>
 
 <div class="background">
-    <div class="bg-base"></div>
-    <div class="bg-glow"></div>
-    <div class="bg-glow-soft"></div>
-    <div class="hairlines"></div>
-    <div class="grain"></div>
-    <div class="vignette"></div>
+<div class="bg-base"></div>
+<div class="bg-glow"></div>
+<div class="bg-glow-soft"></div>
+<div class="hairlines"></div>
+<div class="grain"></div>
+<div class="vignette"></div>
 </div>
 
 <div id="app">
 
-    <nav class="navbar reveal" style="animation-delay:.05s">
-        <div class="brand">
-            <img class="brand-mark" src="data:image/png;base64,${LOGO_B64}" alt="LX logo">
-            <div class="brand-name">Lynx <b>Browser</b></div>
-        </div>
-        <div class="nav-right">
-            <div class="pill clock" id="clock">--:--:--</div>
-            <div class="pill status">
-                <span class="dot"></span>
-                Navegação protegida
-            </div>
-        </div>
-    </nav>
+<nav class="navbar reveal" style="animation-delay:.05s">
+<div class="brand">
+<img class="brand-mark" src="data:image/png;base64,${LOGO_B64}" alt="LX logo">
+<div class="brand-name">Lynx <b>Browser</b></div>
+</div>
+<div class="nav-right">
+<div class="pill clock" id="clock">--:--:--</div>
+<div class="pill status">
+<span class="dot"></span>
+Navegação protegida
+</div>
+</div>
+</nav>
 
-    <main class="main">
+<main class="main">
 
-        <div class="logo-stage reveal" style="animation-delay:.15s">
-            <div class="logo-pedestal"></div>
-            <img class="logo-img" src="data:image/png;base64,${LOGO_B64}" alt="LX logo">
-        </div>
+<div class="logo-stage reveal" style="animation-delay:.15s">
+<div class="logo-pedestal"></div>
+<img class="logo-img" src="data:image/png;base64,${LOGO_B64}" alt="LX logo">
+</div>
 
-        <h1 class="reveal" style="animation-delay:.22s">
-            Bem-vindo ao <b>Lynx</b>
-        </h1>
+<h1 class="reveal" style="animation-delay:.22s">
+Bem-vindo ao <b>Lynx</b>
+</h1>
 
-        <p class="subtitle reveal" style="animation-delay:.28s">
-            Navegue rápido. Navegue do seu jeito.
-        </p>
+<p class="subtitle reveal" style="animation-delay:.28s">
+Navegue rápido. Navegue do seu jeito.
+</p>
 
-        <div class="search-box reveal" style="animation-delay:.34s">
-            <div class="search-frame">
-                <div class="search-icon">⌕</div>
-                <input
-                    class="search"
-                    id="search"
-                    type="text"
-                    placeholder="Pesquise na web ou digite um endereço..."
-                    autocomplete="off"
-                    autofocus
-                >
-                <div class="search-enter">ENTER</div>
-            </div>
-        </div>
+<div class="search-box reveal" style="animation-delay:.34s">
+<div class="search-frame">
+<div class="search-icon">⌕</div>
+<input class="search" id="search" type="text" placeholder="Pesquise na web ou digite um endereço..." autocomplete="off" autofocus>
+<div class="search-enter">ENTER</div>
+</div>
+</div>
 
-        <div class="shortcuts reveal" style="animation-delay:.4s">
-            <div class="shortcut" tabindex="0" onclick="abrir('https://duckduckgo.com')">
-                <span class="shortcut-icon">🔎</span>
-                DuckDuckGo
-            </div>
-            <div class="shortcut" tabindex="0" onclick="abrir('https://www.youtube.com')">
-                <span class="shortcut-icon">▶</span>
-                YouTube
-            </div>
-            <div class="shortcut" tabindex="0" onclick="abrir('https://www.tiktok.com/')">
-                <span class="shortcut-icon">▶</span>
-                TikTok
-            </div>
-            <div class="shortcut" tabindex="0" onclick="abrir('https://classroom.google.com/')">
-                <span class="shortcut-icon">⌘</span>
-                Classroom
-            </div>
-        </div>
+<div class="shortcuts reveal" style="animation-delay:.4s">
+<div class="shortcut" tabindex="0" onclick="abrir('https://duckduckgo.com')">
+<span class="shortcut-icon">🔎</span>
+DuckDuckGo
+</div>
+<div class="shortcut" tabindex="0" onclick="abrir('https://www.youtube.com')">
+<span class="shortcut-icon">▶</span>
+YouTube
+</div>
+<div class="shortcut" tabindex="0" onclick="abrir('https://www.tiktok.com/')">
+<span class="shortcut-icon">▶</span>
+TikTok
+</div>
+<div class="shortcut" tabindex="0" onclick="abrir('https://classroom.google.com/')">
+<span class="shortcut-icon">⌘</span>
+Classroom
+</div>
+</div>
 
-    </main>
+</main>
 
-    <div class="footer reveal" style="animation-delay:.46s">
-        <div class="footer-rule"></div>
-        <div>LYNX BROWSER <b>·</b> RÁPIDO · PRIVADO · DIRETO</div>
-    </div>
+<div class="footer reveal" style="animation-delay:.46s">
+<div class="footer-rule"></div>
+<div>LYNX BROWSER <b>·</b> RÁPIDO · PRIVADO · DIRETO</div>
+</div>
 
 </div>
 
@@ -565,56 +269,129 @@ function abrir(url){ window.location.href=url; }
 </html>
 HOME_EOF
 
-echo "Criando extensão New Tab..."
+echo "[3/6] Interface..."
+mkdir -p "$INSTALL/config/web-novpn" "$INSTALL/config/web-vpn"
 
-NEW_TAB="$WORK/$APP/config/lynx-newtab"
-rm -rf "$NEW_TAB"
-mkdir -p "$NEW_TAB"
+python3 - "$TEMPLATE" "$LOGO" "$INSTALL/config" <<'PY'
+import sys, re, base64
+tpl, logo, out = sys.argv[1:4]
+html = open(tpl, encoding="utf-8").read()
+html = html.replace("${LOGO_B64}", base64.b64encode(open(logo, "rb").read()).decode())
 
-cat > "$NEW_TAB/manifest.json" <<'EOF'
-{
-    "manifest_version": 3,
-    "name": "Lynx New Tab",
-    "version": "1.0",
-    "description": "New Tab do Lynx Browser.",
-    "browser_specific_settings": {
-        "gecko": {
-            "id": "lynx-newtab@lynxbrowser"
-        }
-    }
-}
+# --- SEM VPN: como está ---
+open(out + "/web-novpn/index.html", "w", encoding="utf-8").write(html)
+
+# --- COM VPN ---
+v = re.sub(r"@media\(prefers-reduced-motion:reduce\)\{.*?\}\}\n", "", html, count=1, flags=re.S)
+v = v.replace("clip-path:polygon(100% 0,100% 100%,0 0);opacity:.9}", "clip-path:polygon(100% 0,100% 100%,0 0)}")
+v = v.replace("animation:hover 6s", "animation:logoHover 6s").replace("@keyframes hover{", "@keyframes logoHover{")
+
+m = re.search(r"<script>(.*?)</script>", v, re.S)
+if not m:
+    sys.exit("ERRO: <script> não encontrado no template")
+js = m.group(1)
+v = v[:m.start()] + '<script src="home.js"></script>' + v[m.end():]
+v = re.sub(r"onclick=\"abrir\('([^']+)'\)\"", r'data-url="\1"', v)
+js = js.replace("https://duckduckgo.com/?q=", "https://duckduckgo.com/?kp=1&q=")
+js += """
+document.querySelectorAll("[data-url]").forEach(function (el) {
+    el.addEventListener("click", function () { abrir(el.dataset.url); });
+    el.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") { abrir(el.dataset.url); }
+    });
+});
+"""
+open(out + "/web-vpn/index.html", "w", encoding="utf-8").write(v)
+open(out + "/web-vpn/home.js", "w", encoding="utf-8").write(js)
+PY
+
+echo "[4/6] Configurações..."
+
+echo "$FIREFOX_URL" > "$INSTALL/config/firefox-url.txt"
+
+# --- COM VPN: filtro de DNS, sua lista de sites e lista embutida ---
+cat > "$INSTALL/config/lynx.conf" <<'EOF'
+# Filtro de DNS adulto (CleanBrowsing) - camada extra contra porno.
+# 0 = desativado, 1 = ativado (reabra o Lynx depois de mudar)
+DNS_FILTER=0
 EOF
 
-cp "$WORK/$APP/config/home.html" "$NEW_TAB/home.html"
+# --- SUA lista: um site ou link por linha -------------------
+cat > "$INSTALL/config/blocked-sites.txt" <<'EOF'
+# Coloque aqui os sites que você quer bloquear, um por linha.
+# Aceita domínio (exemplo.com) ou link completo (https://exemplo.com/pagina).
+# Linhas com # são comentários.
+# Depois de editar, basta reabrir o Lynx.
 
-XPI="$WORK/$APP/config/lynx-newtab.xpi"
-cd "$NEW_TAB"
-zip -qr "$XPI" .
-cd "$WORK"
+EOF
 
-rm -rf "$NEW_TAB"
+# --- Lista embutida (pornô / gore / NSFW) -------------------
+cat > "$INSTALL/config/blocklist-default.txt" <<'EOF'
+pornhub.com
+xvideos.com
+xnxx.com
+xhamster.com
+redtube.com
+youporn.com
+spankbang.com
+eporner.com
+tube8.com
+tnaflix.com
+beeg.com
+porn.com
+pornone.com
+porntrex.com
+hqporner.com
+motherless.com
+erome.com
+fapello.com
+thothub.to
+onlyfans.com
+fansly.com
+chaturbate.com
+stripchat.com
+livejasmin.com
+cam4.com
+bongacams.com
+myfreecams.com
+brazzers.com
+realitykings.com
+naughtyamerica.com
+bangbros.com
+rule34.xxx
+rule34.paheal.net
+e621.net
+gelbooru.com
+danbooru.donmai.us
+nhentai.net
+hentaihaven.xxx
+hanime.tv
+hentai2read.com
+luscious.net
+literotica.com
+sex.com
+xtube.com
+4tube.com
+txxx.com
+hclips.com
+# Gore / violência real
+portaldozacarias.com
+bestgore.com
+kaotic.com
+theync.com
+crazyshit.com
+goregrish.com
+documentingreality.com
+liveleak.com
+watchpeopledie.tv
+heavy-r.com
+ogrish.com
+# Anonymous
+proxypal.net
+EOF
 
-echo "[1/6] Baixando Firefox oficial..."
-
-curl -L \
-  "https://download.mozilla.org/?product=firefox-latest-ssl&os=linux64&lang=pt-BR" \
-  -o firefox.tar.xz
-
-echo "[2/6] Extraindo motor do navegador..."
-
-tar -xJf firefox.tar.xz
-mv firefox "$APP/browser/firefox"
-rm firefox.tar.xz
-
-# Substitui ícones do Firefox pela logo do Lynx
-echo "Substituindo ícones do Firefox..."
-find "$APP/browser/firefox" -name "*.png" | grep -i "icon\|logo\|mozicon" | while read -r f; do
-    cp "$APP/config/lynx-logo.png" "$f" 2>/dev/null || true
-done
-
-echo "[3/6] Criando configuração..."
-
-cat > "$APP/config/vpn.conf" <<'EOF'
+# --- SEM VPN: controle de SOCKS5 (como na versão antiga) ---
+cat > "$INSTALL/config/vpn.conf" <<'EOF'
 # ==========================================================
 # LYNX BROWSER - VPN / SOCKS5
 # ==========================================================
@@ -625,94 +402,162 @@ USERNAME=
 PASSWORD=
 EOF
 
-echo "[4/6] Criando perfil privado do Lynx..."
+echo "[5/6] Scripts..."
 
-cat > "$APP/profile/user.js" <<'EOF'
-// LYNX BROWSER - PRIVACY SETTINGS
-user_pref("privacy.trackingprotection.enabled", true);
-user_pref("privacy.trackingprotection.pbmode.enabled", true);
-user_pref("privacy.trackingprotection.socialtracking.enabled", true);
-user_pref("privacy.partition.network_state", true);
-user_pref("privacy.partition.network_state.ocsp_cache", true);
-user_pref("network.trr.mode", 5);
-user_pref("browser.send_pings", false);
-user_pref("dom.battery.enabled", false);
-user_pref("media.peerconnection.enabled", false);
-user_pref("network.dns.disableIPv6", false);
-user_pref("browser.sessionstore.resume_from_crash", false);
-user_pref("browser.shell.checkDefaultBrowser", false);
-user_pref("browser.warnOnQuit", false);
-user_pref("browser.cache.disk.enable", true);
-user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);
-EOF
-
-echo "[5/6] Criando controle de VPN..."
-
-cat > "$APP/vpn" <<'EOF'
-#!/usr/bin/env bash
-set -e
-BASE="$(cd "$(dirname "$0")" && pwd)"
-CONF="$BASE/config/vpn.conf"
-if [ ! -f "$CONF" ]; then echo "Arquivo de configuração não encontrado."; exit 1; fi
-case "${1:-status}" in
-    on)  sed -i 's/^ENABLED=.*/ENABLED=1/' "$CONF"; echo "VPN/Proxy: ATIVADO. Reinicie o navegador." ;;
-    off) sed -i 's/^ENABLED=.*/ENABLED=0/' "$CONF"; echo "VPN/Proxy: DESATIVADO. Reinicie o navegador." ;;
-    status) source "$CONF"; [ "${ENABLED:-0}" = "1" ] && echo "VPN/Proxy: ATIVADO - $HOST:$PORT" || echo "VPN/Proxy: DESATIVADO" ;;
-    config) nano "$CONF" ;;
-    *) echo "Uso: ./vpn on | off | status | config" ;;
-esac
-EOF
-
-chmod +x "$APP/vpn"
-
-echo "[6/6] Criando executável do navegador..."
-
-cat > "$APP/lynx" <<'LYNX_EOF'
+# ----------------------------------------------------------
+# lynx (launcher principal, sempre destacado do terminal)
+# ----------------------------------------------------------
+cat > "$INSTALL/lynx" <<'LYNX_EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 
 BASE="$(cd "$(dirname "$0")" && pwd)"
 FIREFOX="$BASE/browser/firefox/firefox"
-PROFILE="$BASE/profile"
-
-HOME_PAGE="$BASE/config/home.html"
-NEW_TAB_XPI="$BASE/config/lynx-newtab.xpi"
-
+PROFILE="$BASE/.profile"
+CONF="$BASE/config/lynx.conf"
 POLICY_DIR="$BASE/browser/firefox/distribution"
-POLICY_FILE="$POLICY_DIR/policies.json"
 
-if [ ! -x "$FIREFOX" ]; then
-    echo "Erro: Firefox não encontrado."
-    exit 1
+[ -x "$FIREFOX" ] || { echo "ERRO: Firefox não encontrado."; exit 1; }
+
+# Modo escolhido na instalação: vpn (COM VPN) ou novpn (SEM VPN).
+# Instalações antigas, sem escolha registrada, eram COM VPN.
+MODE="vpn"
+[ -f "$BASE/.mode" ] && MODE="$(tr -d '[:space:]' < "$BASE/.mode")"
+[ "$MODE" = "novpn" ] || MODE="vpn"
+
+mkdir -p "$PROFILE" "$PROFILE/chrome" "$POLICY_DIR"
+
+CLASS_ARGS=()
+
+if [ "$MODE" = "vpn" ]; then
+# ===================== COM VPN =====================
+
+DNS_FILTER=0
+# shellcheck disable=SC1090
+[ -f "$CONF" ] && source "$CONF"
+
+# ---- Modo especial: configuração manual da 1VPN ----------
+if [ "${1:-}" = "--setup-1vpn" ]; then
+    CMD='chrome.storage.local.set({ currentLocation: "lax", isConnected: true });'
+    echo "Em about:debugging clique em Inspecionar na 1VPN e cole no Console:"
+    echo "  $CMD"
+    if command -v wl-copy >/dev/null 2>&1; then printf '%s' "$CMD" | wl-copy
+    elif command -v xclip >/dev/null 2>&1; then printf '%s' "$CMD" | xclip -selection clipboard; fi
+    exec "$FIREFOX" --no-remote --profile "$PROFILE" "about:debugging#/runtime/this-firefox"
 fi
 
-mkdir -p "$PROFILE"
-mkdir -p "$POLICY_DIR"
+cat > "$PROFILE/user.js" <<'USERJS_EOF'
+user_pref("security.cert_pinning.enforcement_level", 2);
+user_pref("security.enterprise_roots.enabled", false);
+user_pref("privacy.trackingprotection.enabled", true);
+user_pref("privacy.trackingprotection.pbmode.enabled", true);
+user_pref("privacy.trackingprotection.socialtracking.enabled", true);
+user_pref("privacy.partition.network_state", true);
+user_pref("media.peerconnection.enabled", false);
+user_pref("dom.battery.enabled", false);
+user_pref("browser.send_pings", false);
+user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);
+user_pref("extensions.activeThemeID", "firefox-compact-dark@mozilla.org");
+user_pref("browser.startup.firstrunSkipsHomepage", true);
+user_pref("browser.disableResetPrompt", true);
+user_pref("browser.shell.checkDefaultBrowser", false);
+user_pref("browser.warnOnQuit", false);
+user_pref("browser.sessionstore.resume_from_crash", false);
+user_pref("startup.homepage_welcome_url", "");
+user_pref("startup.homepage_welcome_url.additional", "");
+user_pref("startup.homepage_override_url", "");
+user_pref("browser.startup.upgradeDialog.enabled", false);
+user_pref("xpinstall.signatures.required", false);
+user_pref("extensions.webextensions.ExtensionStorageIDB.enabled", false);
+USERJS_EOF
 
-if [ ! -f "$NEW_TAB_XPI" ]; then
-    echo "Erro: lynx-newtab.xpi não encontrado."
-    exit 1
+if [ "$DNS_FILTER" = "1" ]; then
+    cat >> "$PROFILE/user.js" <<'USERJS_EOF'
+user_pref("network.trr.mode", 3);
+user_pref("network.trr.uri", "https://doh.cleanbrowsing.org/doh/adult-filter/");
+user_pref("network.trr.bootstrapAddress", "185.228.168.10");
+USERJS_EOF
+else
+    cat >> "$PROFILE/user.js" <<'USERJS_EOF'
+user_pref("network.trr.mode", 5);
+user_pref("network.trr.uri", "");
+user_pref("network.trr.bootstrapAddress", "");
+USERJS_EOF
 fi
 
-NEW_TAB_XPI_ABS="$(readlink -f "$NEW_TAB_XPI")"
+cat >> "$PROFILE/user.js" <<'USERJS_EOF'
+user_pref("network.proxy.type", 0);
+user_pref("network.proxy.no_proxies_on", "localhost, 127.0.0.1");
+USERJS_EOF
 
-cat > "$POLICY_FILE" <<POLICY_EOF
+# ---- 1VPN: tenta deixar pré-configurada nos EUA (experimental) ----
+SEED_DIR="$PROFILE/browser-extension-data/1vpn@example.com"
+if [ ! -f "$SEED_DIR/storage.js" ]; then
+    mkdir -p "$SEED_DIR"
+    printf '{"currentLocation":"lax","isConnected":true}' > "$SEED_DIR/storage.js"
+fi
+
+# ---- Bloqueio de sites -----------------------------------
+to_pattern() {
+    local s="$1"
+    s="${s%%#*}"
+    s="$(printf '%s' "$s" | tr -d '"\\\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+    [ -z "$s" ] && return 0
+    s="${s#http://}"; s="${s#https://}"; s="${s#www.}"
+    if [[ "$s" == */* ]] && [ -n "${s#*/}" ]; then
+        printf '%s' "*://*.${s}*"
+    else
+        s="${s%/}"
+        printf '%s' "*://*.${s}/*"
+    fi
+}
+
+BLOCK_JSON=""
+while IFS= read -r line || [ -n "$line" ]; do
+    p="$(to_pattern "$line")"
+    [ -n "$p" ] && BLOCK_JSON+="\"$p\","
+done < <(cat "$BASE/config/blocklist-default.txt" "$BASE/config/blocked-sites.txt" 2>/dev/null)
+
+# Palavras-chave no caminho do link (pega sites novos que não estão na lista)
+for kw in porn hentai nsfw; do
+    BLOCK_JSON+="\"*://*/*${kw}*\","
+done
+BLOCK_JSON="${BLOCK_JSON%,}"
+
+cat > "$POLICY_DIR/policies.json" <<POLICY_EOF
 {
     "policies": {
+        "WebsiteFilter": {
+            "Block": [ $BLOCK_JSON ]
+        },
+        "BlockAboutConfig": true,
+        "BlockAboutProfiles": true,
+        "BlockAboutSupport": true,
         "ExtensionSettings": {
-            "lynx-newtab@lynxbrowser": {
+            "1vpn@example.com": {
                 "installation_mode": "force_installed",
-                "install_url": "file://$NEW_TAB_XPI_ABS",
-                "updates_disabled": true
+                "install_url": "https://addons.mozilla.org/firefox/downloads/latest/1vpn/latest.xpi",
+                "default_area": "navbar",
+                "private_browsing": true
             }
         }
     }
 }
 POLICY_EOF
-mkdir -p "$PROFILE/chrome"
 
-# Gera user.js com caminho absoluto correto para esta instalação
-cat > "$PROFILE/user.js" <<USERJS_EOF
+cat > "$PROFILE/chrome/userChrome.css" <<'CSS_EOF'
+#aboutHeaderLearnMore { display: none !important; }
+CSS_EOF
+
+CLASS_ARGS=(--class LynxBrowser)
+
+else
+# ===================== SEM VPN =====================
+
+# Este modo não usa extensões nem políticas: remove sobras do modo COM VPN.
+rm -f "$POLICY_DIR/policies.json"
+
+cat > "$PROFILE/user.js" <<'USERJS_EOF'
 /* Lynx Browser - Configurações */
 
 /* DNS-over-HTTPS - Cloudflare */
@@ -769,47 +614,530 @@ cat > "$PROFILE/chrome/userChrome.css" <<'CSS_EOF'
 }
 CSS_EOF
 
-echo "========================================="
-echo " LYNX BROWSER"
-echo " DNS: CLOUDFLARE 1.1.1.1"
-echo " DNS-over-HTTPS: ATIVADO"
-echo " TEMA: ESCURO"
-echo " VPN/PROXY: DESATIVADO"
-echo "========================================="
+# Substitui os ícones do Firefox pela logo do Lynx (uma vez por instalação)
+if [ ! -f "$BASE/.icons-done" ]; then
+    (
+        cd "$BASE/browser/firefox"
+        find . -name "*.png" | grep -i "icon\|logo\|mozicon" | while read -r f; do
+            cp "$BASE/config/icons/lynx-logo.png" "$f" 2>/dev/null || true
+        done
+    ) || true
+    touch "$BASE/.icons-done"
+fi
 
-exec "$FIREFOX" \
+fi
+
+LYNX_PORT=47321
+HOME_URL="http://127.0.0.1:$LYNX_PORT/"
+START_URL="about:blank"
+
+if command -v python3 >/dev/null 2>&1; then
+    nohup setsid python3 "$BASE/server.py" "$LYNX_PORT" "$BASE/config/web-$MODE" >/dev/null 2>&1 </dev/null &
+    for _ in $(seq 1 30); do
+        if (exec 3<>"/dev/tcp/127.0.0.1/$LYNX_PORT") 2>/dev/null; then
+            START_URL="$HOME_URL"
+            break
+        fi
+        sleep 0.1
+    done
+fi
+
+if [ "$START_URL" = "$HOME_URL" ]; then
+    printf 'user_pref("browser.startup.homepage", "%s");\n' "$HOME_URL" >> "$PROFILE/user.js"
+    printf 'user_pref("browser.startup.page", 1);\n' >> "$PROFILE/user.js"
+fi
+
+# AutoConfig: aponta a Nova Aba para a mesma pagina
+FF_DIR="$BASE/browser/firefox"
+mkdir -p "$FF_DIR/defaults/pref"
+
+cat > "$FF_DIR/defaults/pref/autoconfig.js" <<'AC_EOF'
+pref("general.config.filename", "lynx.cfg");
+pref("general.config.obscure_value", 0);
+pref("general.config.sandbox_enabled", false);
+AC_EOF
+
+cat > "$FF_DIR/lynx.cfg" <<CFG_EOF
+// Lynx Browser
+try {
+  var lynxUrl = "$HOME_URL";
+  Services.obs.addObserver({
+    observe: function () {
+      try {
+        var svc = Components.classes["@mozilla.org/browser/aboutnewtab-service;1"]
+          .getService(Components.interfaces.nsIAboutNewTabService);
+        svc.newTabURL = lynxUrl;
+      } catch (e) {
+        try {
+          var m = ChromeUtils.importESModule("resource:///modules/AboutNewTab.sys.mjs");
+          m.AboutNewTab.newTabURL = lynxUrl;
+        } catch (e2) {}
+      }
+    }
+  }, "final-ui-startup", false);
+} catch (e) {}
+CFG_EOF
+
+nohup setsid "$FIREFOX" \
     --no-remote \
+    ${CLASS_ARGS[@]+"${CLASS_ARGS[@]}"} \
     --profile "$PROFILE" \
-    "$HOME_PAGE" \
-    "$@"
-    
+    "$START_URL" \
+    "$@" >/dev/null 2>&1 </dev/null &
+disown || true
+touch "$BASE/.started"
+exit 0
 LYNX_EOF
+chmod +x "$INSTALL/lynx"
 
-chmod +x "$APP/lynx"
-
-cat > "$APP/start.sh" <<'START_EOF'
+cat > "$INSTALL/start.sh" <<'START_EOF'
 #!/usr/bin/env bash
 BASE="$(cd "$(dirname "$0")" && pwd)"
-exec "$BASE/lynx" "$@"
+
+if [ -x "$BASE/browser/firefox/firefox" ]; then
+    exec "$BASE/lynx" "$@"
+fi
+
+if ! command -v python3 >/dev/null 2>&1; then
+    command -v notify-send >/dev/null 2>&1 && \
+        notify-send "Lynx Browser" "python3 é necessário para a primeira instalação."
+    exit 1
+fi
+
+nohup setsid python3 "$BASE/setup.py" >/dev/null 2>&1 </dev/null &
+disown || true
+exit 0
 START_EOF
+chmod +x "$INSTALL/start.sh"
 
-chmod +x "$APP/start.sh"
+cat > "$INSTALL/setup.py" <<'PY_EOF'
+#!/usr/bin/env python3
+import fcntl, http.server, json, os, shutil, subprocess, tarfile
+import threading, time, urllib.parse, urllib.request, webbrowser
 
-cat > "$APP/Lynx Browser.desktop" <<'DESKTOP_EOF'
-[Desktop Entry]
-Version=1.0
-Type=Application
-Name=Lynx Browser
-GenericName=Web Browser
-Comment=Lynx Browser
-Exec=./start.sh
-Terminal=false
-StartupNotify=true
-StartupWMClass=LynxBrowser
-Categories=Network;WebBrowser;
-DESKTOP_EOF
+BASE = os.path.dirname(os.path.abspath(__file__))
+CFG = os.path.join(BASE, "config")
 
-cat > "$APP/README.txt" <<'README_EOF'
+state = {"stage": "starting", "overall": 0, "percent": 0, "done": 0,
+         "total": 0, "speed": 0, "eta": None, "msg": "Preparando..."}
+
+PAGE = r"""<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<title>Lynx Browser - Instalando</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--black:#050506;--panel:#0b0c0f;--hi:#121319;--line:rgba(255,255,255,.09);
+--blue:#1d4fea;--bright:#3f6dff;--ice:#eef1f8;--slate:#838a9a;--dim:#484e5c}
+html,body{height:100%}
+body{background:radial-gradient(ellipse 60% 50% at 50% 0%,rgba(29,79,234,.25),transparent 60%),var(--black);
+color:var(--ice);font-family:Inter,Arial,sans-serif;display:flex;align-items:center;justify-content:center}
+.card{width:min(560px,94vw);background:linear-gradient(160deg,var(--hi),var(--panel) 70%);
+border:1px solid var(--line);padding:34px 30px;
+clip-path:polygon(24px 0,100% 0,100% calc(100% - 24px),calc(100% - 24px) 100%,0 100%,0 24px)}
+.head{display:flex;align-items:center;gap:14px;margin-bottom:24px}
+.head img{width:52px;height:52px;object-fit:contain;filter:drop-shadow(0 0 14px rgba(29,79,234,.6))}
+h1{font-size:22px;letter-spacing:-.5px}h1 b{color:var(--bright)}
+.sub{color:var(--slate);font-size:13px;margin-top:3px}
+.bar{height:10px;background:#15171e;border:1px solid var(--line);overflow:hidden}
+.fill{height:100%;width:0;background:linear-gradient(90deg,#081b66,var(--blue),var(--bright));
+transition:width .35s ease;box-shadow:0 0 14px rgba(63,109,255,.6)}
+.pct{display:flex;justify-content:space-between;margin:12px 0 22px;font-family:monospace;font-size:12px;color:var(--slate)}
+.pct b{font-size:30px;color:var(--ice);font-family:Arial,sans-serif;letter-spacing:-1px}
+.steps{list-style:none;display:grid;gap:10px;margin-bottom:22px}
+.steps li{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--dim)}
+.steps li i{width:8px;height:8px;border-radius:50%;background:var(--dim)}
+.steps li.on{color:var(--ice)}.steps li.on i{background:var(--bright);box-shadow:0 0 8px var(--bright);animation:b 1.4s infinite}
+.steps li.ok{color:var(--slate)}.steps li.ok i{background:#3ddc84}
+@keyframes b{50%{opacity:.3}}
+.info{font-family:monospace;font-size:11px;color:var(--slate);border-top:1px solid var(--line);padding-top:14px;min-height:30px}
+.err{color:#ff7b7b}
+#choose{display:none}
+.opts{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.opt{text-align:left;cursor:pointer;background:var(--panel);border:1px solid var(--line);color:var(--ice);
+padding:16px 14px;font-family:inherit;transition:border-color .2s,transform .2s,background .2s;
+clip-path:polygon(0 0,100% 0,100% calc(100% - 14px),calc(100% - 14px) 100%,0 100%)}
+.opt:hover,.opt:focus-visible{border-color:rgba(63,109,255,.6);background:var(--hi);transform:translateY(-2px);outline:none}
+.opt h2{font-size:15px;margin-bottom:10px;letter-spacing:.3px}.opt h2 b{color:var(--bright)}
+.opt ul{list-style:none;display:grid;gap:7px}
+.opt li{font-size:12px;color:var(--slate);line-height:1.35;padding-left:12px;position:relative}
+.opt li:before{content:"";position:absolute;left:0;top:6px;width:5px;height:5px;background:var(--bright)}
+@media(max-width:480px){.opts{grid-template-columns:1fr}}
+</style></head><body>
+<div class="card">
+<div class="head"><img src="/logo.png" alt=""><div><h1 id="title">Instalando o <b>Lynx</b></h1><div class="sub" id="msg">Preparando...</div></div></div>
+
+<div id="choose">
+<div class="opts">
+<button class="opt" id="o-vpn" onclick="escolher('vpn')">
+<h2>COM <b>VPN</b></h2>
+<ul>
+<li>Extensão 1VPN, pré-configurada nos EUA</li>
+<li>Bloqueio de pornô, gore e NSFW, com a sua lista de sites</li>
+<li>SafeSearch na busca</li>
+</ul>
+</button>
+<button class="opt" id="o-novpn" onclick="escolher('novpn')">
+<h2>SEM <b>VPN</b></h2>
+<ul>
+<li>DNS criptografado (Cloudflare)</li>
+<li>Ícones do Lynx no lugar dos do Firefox</li>
+<li>Interface sem referências ao Firefox</li>
+</ul>
+</button>
+</div>
+</div>
+
+<div id="prog">
+<div class="bar"><div class="fill" id="fill"></div></div>
+<div class="pct"><b id="pct">0%</b><span id="eta"></span></div>
+<ul class="steps" id="steps">
+<li data-s="download"><i></i>Baixando o motor do navegador</li>
+<li data-s="extract"><i></i>Extraindo arquivos</li>
+<li data-s="config"><i></i>Aplicando configurações</li>
+<li data-s="launch"><i></i>Abrindo o Lynx</li>
+</ul>
+<div class="info" id="info"></div>
+</div>
+</div>
+<script>
+var order=["download","extract","config","launch"];
+function mb(n){return (n/1048576).toFixed(1)+" MB"}
+function tm(s){if(s==null)return"";s=Math.round(s);return s>=60?Math.floor(s/60)+"min "+(s%60)+"s":s+"s"}
+function escolher(m){
+ document.getElementById("o-vpn").disabled=true;document.getElementById("o-novpn").disabled=true;
+ fetch("/choose?mode="+m,{method:"POST"});
+}
+function tick(){
+ fetch("/progress",{cache:"no-store"}).then(function(r){return r.json()}).then(function(s){
+  var ch=(s.stage=="choose");
+  document.getElementById("choose").style.display=ch?"block":"none";
+  document.getElementById("prog").style.display=ch?"none":"block";
+  document.getElementById("title").innerHTML=ch?"Como você quer o <b>Lynx</b>?":"Instalando o <b>Lynx</b>";
+  document.getElementById("msg").textContent=ch?"Escolha antes de instalar":s.msg;
+  document.getElementById("fill").style.width=s.overall+"%";
+  document.getElementById("pct").textContent=Math.floor(s.overall)+"%";
+  document.getElementById("eta").textContent=(s.stage=="download"&&s.eta!=null)?"faltam ~"+tm(s.eta):"";
+  var idx=order.indexOf(s.stage);if(s.stage=="done")idx=99;
+  document.querySelectorAll("#steps li").forEach(function(li){
+   var i=order.indexOf(li.dataset.s);
+   li.className=i<idx?"ok":(i==idx?"on":"");
+  });
+  if(s.stage=="done"&&!window._c){window._c=1;setTimeout(function(){window.close()},1200);}
+  var info=document.getElementById("info");
+  if(s.stage=="error"){info.className="info err";info.textContent=s.msg;}
+  else if(s.stage=="download"&&s.total){info.textContent=mb(s.done)+" / "+mb(s.total)+"  ·  "+mb(s.speed)+"/s";}
+  else{info.textContent="";}
+ }).catch(function(){});
+}
+setInterval(tick,400);tick();
+</script></body></html>"""
+
+
+choice = {"mode": None}
+choice_evt = threading.Event()
+
+
+class Handler(http.server.BaseHTTPRequestHandler):
+    def log_message(self, *a):
+        pass
+
+    def do_GET(self):
+        if self.path.startswith("/progress"):
+            body, ctype = json.dumps(state).encode(), "application/json"
+        elif self.path.startswith("/logo.png"):
+            with open(os.path.join(CFG, "icons", "lynx-logo.png"), "rb") as f:
+                body, ctype = f.read(), "image/png"
+        else:
+            body, ctype = PAGE.encode("utf-8"), "text/html; charset=utf-8"
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_POST(self):
+        ok = False
+        if self.path.startswith("/choose") and state["stage"] == "choose":
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            mode = q.get("mode", [""])[0]
+            if mode in ("vpn", "novpn") and choice["mode"] is None:
+                choice["mode"] = mode
+                choice_evt.set()
+                ok = True
+        body = json.dumps({"ok": ok}).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+
+def open_window(url):
+    """Abre a pagina de progresso e devolve a pasta de perfil usada,
+    que serve de marcador para fechar a janela depois."""
+    quiet = dict(stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                 stderr=subprocess.DEVNULL, start_new_session=True)
+    for name in ("google-chrome", "google-chrome-stable", "chromium",
+                 "chromium-browser", "brave-browser", "microsoft-edge"):
+        path = shutil.which(name)
+        if path:
+            prof = "/tmp/lynx-setup-%d" % os.getpid()
+            subprocess.Popen(
+                [path, "--app=" + url, "--window-size=620,560",
+                 "--user-data-dir=" + prof, "--no-first-run",
+                 "--no-default-browser-check"], **quiet)
+            return prof
+    path = shutil.which("firefox")
+    if path:
+        # Perfil proprio e visivel (snap nao enxerga pastas ocultas); apagado no fim.
+        prof = os.path.join(os.path.expanduser("~"), "lynx-setup-%d" % os.getpid())
+        os.makedirs(prof, exist_ok=True)
+        with open(os.path.join(prof, "user.js"), "w") as f:
+            f.write('user_pref("browser.shell.checkDefaultBrowser", false);\n'
+                    'user_pref("browser.startup.homepage_welcome_url", "");\n'
+                    'user_pref("datareporting.policy.dataSubmissionEnabled", false);\n'
+                    'user_pref("browser.aboutwelcome.enabled", false);\n')
+        subprocess.Popen([path, "--no-remote", "--profile", prof,
+                          "--new-window", url], **quiet)
+        return prof
+    webbrowser.open(url)
+    return None
+
+
+def close_window(marker):
+    """Fecha a janela de progresso (qualquer processo que use o perfil marcador)."""
+    if not marker:
+        return
+    me = os.getpid()
+    for pid in os.listdir("/proc"):
+        if not pid.isdigit() or int(pid) == me:
+            continue
+        try:
+            with open("/proc/%s/cmdline" % pid, "rb") as f:
+                cmd = f.read().decode(errors="ignore")
+        except OSError:
+            continue
+        if marker in cmd:
+            try:
+                os.kill(int(pid), 15)
+            except OSError:
+                pass
+    time.sleep(1.5)
+    shutil.rmtree(marker, ignore_errors=True)
+
+
+def download(url, dest):
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 LynxSetup"})
+    with urllib.request.urlopen(req, timeout=30) as r, open(dest, "wb") as f:
+        total = int(r.headers.get("Content-Length") or 0)
+        state.update(stage="download", total=total, msg="Baixando o Firefox...")
+        done, t0, last = 0, time.time(), 0
+        while True:
+            chunk = r.read(262144)
+            if not chunk:
+                break
+            f.write(chunk)
+            done += len(chunk)
+            now = time.time()
+            if now - last > 0.25:
+                speed = done / max(now - t0, 0.001)
+                pct = (done / total * 100) if total else 0
+                state.update(done=done, speed=speed, percent=pct,
+                             overall=pct * 0.70,
+                             eta=((total - done) / speed) if total and speed else None)
+                last = now
+    state.update(done=done, percent=100, overall=70)
+
+
+def extract(tar_path, tmp):
+    size = os.path.getsize(tar_path)
+    state.update(stage="extract", msg="Extraindo arquivos...", eta=None)
+    kw = {"filter": "tar"} if hasattr(tarfile, "tar_filter") else {}
+    with open(tar_path, "rb") as raw:
+        with tarfile.open(fileobj=raw, mode="r|xz") as tf:
+            for m in tf:
+                tf.extract(m, tmp, **kw)
+                state["overall"] = 70 + 25 * (raw.tell() / size)
+
+
+def main():
+    lock = open(os.path.join(BASE, ".setup.lock"), "w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        return
+
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    win = open_window("http://127.0.0.1:%d/" % srv.server_address[1])
+    open(os.path.join(BASE, ".started"), "w").close()
+
+    tar_path = os.path.join(BASE, "firefox.tar.xz")
+    tmp = os.path.join(BASE, "_extract")
+    try:
+        # Pergunta COM ou SEM VPN antes de instalar (só se ainda não foi escolhido)
+        mode_file = os.path.join(BASE, ".mode")
+        if not os.path.exists(mode_file):
+            state.update(stage="choose", msg="Como você quer o Lynx?")
+            if not choice_evt.wait(timeout=900) or choice["mode"] not in ("vpn", "novpn"):
+                raise RuntimeError("Nenhuma opção foi escolhida.")
+            with open(mode_file, "w") as f:
+                f.write(choice["mode"])
+        state.update(stage="starting", msg="Preparando...")
+
+        url = open(os.path.join(CFG, "firefox-url.txt")).read().strip()
+        download(url, tar_path)
+
+        shutil.rmtree(tmp, ignore_errors=True)
+        os.makedirs(tmp)
+        extract(tar_path, tmp)
+
+        state.update(stage="config", overall=96, msg="Aplicando configurações...")
+        dest = os.path.join(BASE, "browser", "firefox")
+        shutil.rmtree(dest, ignore_errors=True)
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        os.rename(os.path.join(tmp, "firefox"), dest)
+        shutil.rmtree(tmp, ignore_errors=True)
+        os.remove(tar_path)
+
+        state.update(stage="launch", overall=99, msg="Abrindo o Lynx...")
+        subprocess.Popen([os.path.join(BASE, "lynx")],
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, start_new_session=True)
+        time.sleep(3)
+        state.update(stage="done", overall=100, msg="Pronto! Abrindo o Lynx...")
+        time.sleep(2)
+        close_window(win)
+    except Exception as e:
+        state.update(stage="error", msg="Erro: %s" % e)
+        time.sleep(90)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+        os._exit(0)
+
+
+main()
+PY_EOF
+chmod +x "$INSTALL/setup.py"
+
+cat > "$INSTALL/server.py" <<'SRV_EOF'
+#!/usr/bin/env python3
+import http.server, os, sys, threading, time
+
+BASE = os.path.dirname(os.path.abspath(__file__))
+WEB = sys.argv[2] if len(sys.argv) > 2 else os.path.join(BASE, "config", "web-vpn")
+PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 47321
+MARK = os.path.join(BASE, ".profile")
+
+
+class Handler(http.server.SimpleHTTPRequestHandler):
+    def __init__(self, *a, **k):
+        super().__init__(*a, directory=WEB, **k)
+
+    def log_message(self, *a):
+        pass
+
+    def end_headers(self):
+        self.send_header("Cache-Control", "no-store")
+        super().end_headers()
+
+
+def lynx_running():
+    for pid in os.listdir("/proc"):
+        if not pid.isdigit():
+            continue
+        try:
+            with open("/proc/%s/cmdline" % pid, "rb") as f:
+                cmd = f.read().decode(errors="ignore")
+        except OSError:
+            continue
+        if MARK in cmd:
+            return True
+    return False
+
+
+try:
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+except OSError:
+    sys.exit(0)  # ja existe um servidor do Lynx rodando
+
+threading.Thread(target=srv.serve_forever, daemon=True).start()
+
+seen, gone = False, None
+while True:
+    time.sleep(3)
+    if lynx_running():
+        seen, gone = True, None
+    else:
+        gone = gone or time.time()
+        if time.time() - gone > (15 if seen else 90):
+            break
+os._exit(0)
+SRV_EOF
+chmod +x "$INSTALL/server.py"
+
+cat > "$INSTALL/sites" <<'SITES_EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+BASE="$(cd "$(dirname "$0")" && pwd)"
+LIST="$BASE/config/blocked-sites.txt"
+
+if [ "$(cat "$BASE/.mode" 2>/dev/null || echo vpn)" = "novpn" ]; then
+    echo "A lista de sites só vale no modo COM VPN (bash build-lynx.sh --com-vpn)."
+    exit 1
+fi
+
+case "${1:-list}" in
+    add)    [ -n "${2:-}" ] || { echo "Uso: ./sites add site.com"; exit 1; }
+            echo "$2" >> "$LIST"; echo "Adicionado: $2 (reabra o Lynx)" ;;
+    remove) [ -n "${2:-}" ] || { echo "Uso: ./sites remove site.com"; exit 1; }
+            grep -vxF "$2" "$LIST" > "$LIST.tmp" || true; mv "$LIST.tmp" "$LIST"
+            echo "Removido: $2 (reabra o Lynx)" ;;
+    list)   grep -v '^[[:space:]]*\(#\|$\)' "$LIST" || echo "(lista vazia)" ;;
+    edit)   ${EDITOR:-nano} "$LIST" ;;
+    *)      echo "Uso: ./sites add|remove|list|edit [site]"; exit 1 ;;
+esac
+SITES_EOF
+chmod +x "$INSTALL/sites"
+
+cat > "$INSTALL/test.sh" <<'TEST_EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+BASE="$(cd "$(dirname "$0")" && pwd)"
+P="/tmp/lynx-clean-profile-$$"
+mkdir -p "$P"
+cat > "$P/user.js" <<'EOF'
+user_pref("network.trr.mode", 5);
+user_pref("network.trr.uri", "");
+user_pref("network.proxy.type", 0);
+EOF
+"$BASE/browser/firefox/firefox" --no-remote --profile "$P" "https://example.com"
+rm -rf "$P"
+TEST_EOF
+chmod +x "$INSTALL/test.sh"
+
+cat > "$INSTALL/vpn" <<'VPN_EOF'
+#!/usr/bin/env bash
+set -e
+BASE="$(cd "$(dirname "$0")" && pwd)"
+CONF="$BASE/config/vpn.conf"
+if [ "$(cat "$BASE/.mode" 2>/dev/null || echo vpn)" != "novpn" ]; then
+    echo "Este controle só vale no modo SEM VPN (bash build-lynx.sh --sem-vpn)."
+    exit 1
+fi
+if [ ! -f "$CONF" ]; then echo "Arquivo de configuração não encontrado."; exit 1; fi
+case "${1:-status}" in
+    on)  sed -i 's/^ENABLED=.*/ENABLED=1/' "$CONF"; echo "VPN/Proxy: ATIVADO. Reinicie o navegador." ;;
+    off) sed -i 's/^ENABLED=.*/ENABLED=0/' "$CONF"; echo "VPN/Proxy: DESATIVADO. Reinicie o navegador." ;;
+    status) source "$CONF"; [ "${ENABLED:-0}" = "1" ] && echo "VPN/Proxy: ATIVADO - $HOST:$PORT" || echo "VPN/Proxy: DESATIVADO" ;;
+    config) nano "$CONF" ;;
+    *) echo "Uso: ./vpn on | off | status | config" ;;
+esac
+VPN_EOF
+chmod +x "$INSTALL/vpn"
+
+cat > "$INSTALL/README.txt" <<'README_EOF'
 ====================================================
                  LYNX BROWSER
 ====================================================
@@ -819,35 +1147,30 @@ Navegador Linux portátil.
 EXECUTAR:
     ./start.sh
 
-VPN / SOCKS5:
-    ./vpn status
-    ./vpn config
-    ./vpn on
-    ./vpn off
+MODO COM VPN:
+    ./sites add|remove|list|edit   (sua lista de sites bloqueados)
+    ./lynx --setup-1vpn            (configuração manual da 1VPN)
+
+MODO SEM VPN:
+    ./vpn status | config | on | off
+
+MUDAR DE MODO (na pasta do build-lynx.sh):
+    bash build-lynx.sh --com-vpn
+    bash build-lynx.sh --sem-vpn
 
 ====================================================
 README_EOF
 
-echo
-echo "Empacotando..."
+echo "[6/6] Finalizando..."
 
-cd "$WORK"
-tar -czf "$OUT" "$APP"
+DESK_DIR="$(xdg-user-dir DESKTOP 2>/dev/null || echo "$HOME/Desktop")"
+rm -f "$HOME/.local/share/applications/lynx-browser.desktop" \
+      "$DESK_DIR/Lynx Browser.desktop" \
+      "$HOME/.local/bin/lynx-browser" \
+      "$HOME/.local/share/icons/hicolor/256x256/apps/lynx-browser.png"
+command -v update-desktop-database >/dev/null 2>&1 && \
+    update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
 
-echo
-echo "========================================="
-echo " BUILD CONCLUÍDO"
-echo "========================================="
-echo
-echo "Arquivo: $OUT"
-du -h "$OUT"
-echo
-echo "Descompactando o Lynx Browser..."
-
-INSTALL_DIR="$PWD/LynxBrowser"
-rm -rf "$INSTALL_DIR"
-tar -xzf "$OUT" -C "$PWD"
-
-echo
-echo "Iniciando o Lynx Browser..."
-exec "$INSTALL_DIR/start.sh"
+echo "Pronto. Abrindo o Lynx..."
+launch_lynx
+exit 0
