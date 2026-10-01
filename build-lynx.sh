@@ -404,9 +404,6 @@ EOF
 
 echo "[5/6] Scripts..."
 
-# ----------------------------------------------------------
-# lynx (launcher principal, sempre destacado do terminal)
-# ----------------------------------------------------------
 cat > "$INSTALL/lynx" <<'LYNX_EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -419,8 +416,6 @@ POLICY_DIR="$BASE/browser/firefox/distribution"
 
 [ -x "$FIREFOX" ] || { echo "ERRO: Firefox não encontrado."; exit 1; }
 
-# Modo escolhido na instalação: vpn (COM VPN) ou novpn (SEM VPN).
-# Instalações antigas, sem escolha registrada, eram COM VPN.
 MODE="vpn"
 [ -f "$BASE/.mode" ] && MODE="$(tr -d '[:space:]' < "$BASE/.mode")"
 [ "$MODE" = "novpn" ] || MODE="vpn"
@@ -430,13 +425,11 @@ mkdir -p "$PROFILE" "$PROFILE/chrome" "$POLICY_DIR"
 CLASS_ARGS=()
 
 if [ "$MODE" = "vpn" ]; then
-# ===================== COM VPN =====================
 
 DNS_FILTER=0
 # shellcheck disable=SC1090
 [ -f "$CONF" ] && source "$CONF"
 
-# ---- Modo especial: configuração manual da 1VPN ----------
 if [ "${1:-}" = "--setup-1vpn" ]; then
     CMD='chrome.storage.local.set({ currentLocation: "lax", isConnected: true });'
     echo "Em about:debugging clique em Inspecionar na 1VPN e cole no Console:"
@@ -497,7 +490,6 @@ if [ ! -f "$SEED_DIR/storage.js" ]; then
     printf '{"currentLocation":"lax","isConnected":true}' > "$SEED_DIR/storage.js"
 fi
 
-# ---- Bloqueio de sites -----------------------------------
 to_pattern() {
     local s="$1"
     s="${s%%#*}"
